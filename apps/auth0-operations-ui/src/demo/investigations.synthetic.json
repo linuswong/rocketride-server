@@ -1,0 +1,192 @@
+{
+  "synthetic": true,
+  "description": "SYNTHETIC: fictional investigations and timestamps for local testing only. These are not Auth0 log records, real user history, or evidence of tenant state. Event codes beginning synthetic_ are illustrative placeholders.",
+  "investigations": [
+    {
+      "id": "SYN-001",
+      "scenario": "successful_login",
+      "email": "avery.cole@example.com",
+      "events": [
+        {
+          "date": "2026-11-14T09:03:00Z",
+          "type": "s",
+          "description": "Successful login",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T09:15:00Z",
+          "type": "s",
+          "description": "Successful login",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Successful login"
+    },
+    {
+      "id": "SYN-002",
+      "scenario": "incorrect_password",
+      "email": "morgan.patel@example.net",
+      "events": [
+        {
+          "date": "2026-11-16T10:02:00Z",
+          "type": "fp",
+          "description": "Incorrect password",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T10:04:00Z",
+          "type": "fp",
+          "description": "Incorrect password",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Incorrect password"
+    },
+    {
+      "id": "SYN-003",
+      "scenario": "brute_force_protection",
+      "email": "riley.chen@example.org",
+      "events": [
+        {
+          "date": "2026-11-16T11:00:00Z",
+          "type": "fp",
+          "description": "Incorrect password",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T11:01:00Z",
+          "type": "fp",
+          "description": "Incorrect password",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T11:02:00Z",
+          "type": "limit_wc",
+          "description": "Brute-force protection block",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Brute-force protection block"
+    },
+    {
+      "id": "SYN-004",
+      "scenario": "mfa_challenge",
+      "email": "jordan.okafor@example.com",
+      "events": [
+        {
+          "date": "2026-11-16T11:30:00Z",
+          "type": "synthetic_mfa_challenge",
+          "description": "MFA challenge presented",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T11:31:00Z",
+          "type": "s",
+          "description": "Successful login after MFA",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "MFA challenge"
+    },
+    {
+      "id": "SYN-005",
+      "scenario": "missing_user",
+      "email": "missing.person@example.org",
+      "events": [
+        {
+          "date": "2026-11-16T12:00:00Z",
+          "type": "fu",
+          "description": "Login attempted for missing user",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Missing user"
+    },
+    {
+      "id": "SYN-006",
+      "scenario": "failed_login",
+      "email": "casey.brooks@example.org",
+      "events": [
+        {
+          "date": "2026-11-15T08:00:00Z",
+          "type": "s",
+          "description": "Successful login",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T12:30:00Z",
+          "type": "f",
+          "description": "Generic failed login",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Generic failed login"
+    },
+    {
+      "id": "SYN-007",
+      "scenario": "mfa_failure",
+      "email": "quinn.rivera@example.com",
+      "events": [
+        {
+          "date": "2026-11-16T13:00:00Z",
+          "type": "synthetic_mfa_challenge",
+          "description": "MFA challenge presented",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T13:01:00Z",
+          "type": "synthetic_mfa_failure",
+          "description": "MFA challenge failed",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "MFA challenge failed"
+    },
+    {
+      "id": "SYN-008",
+      "scenario": "admin_block",
+      "email": "taylor.silva@example.net",
+      "events": [
+        {
+          "date": "2026-11-15T15:00:00Z",
+          "type": "s",
+          "description": "Successful login",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T14:00:00Z",
+          "type": "synthetic_admin_block",
+          "description": "Administrative block applied",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T14:05:00Z",
+          "type": "f",
+          "description": "Sign-in rejected for blocked account",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Administrative block"
+    },
+    {
+      "id": "SYN-009",
+      "scenario": "successful_after_failure",
+      "email": "rowan.ellis@example.org",
+      "events": [
+        {
+          "date": "2026-11-16T15:00:00Z",
+          "type": "fp",
+          "description": "Incorrect password",
+          "synthetic": true
+        },
+        {
+          "date": "2026-11-16T15:02:00Z",
+          "type": "s",
+          "description": "Successful login after failed login",
+          "synthetic": true
+        }
+      ],
+      "expected_finding": "Successful login after failed login"
+    }
+  ]
+}

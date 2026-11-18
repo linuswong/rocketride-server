@@ -70,12 +70,8 @@ export default defineConfig(() => ({
 	// allowlist is possible; declaring it also stops the MF plugin injecting
 	// its own wildcard defaults (and warning about it).
 	server: { port: 3821, cors: { origin: '*' } },
-	// hmr on; liveReload stays at its DEFAULT (true): a failed hot update
-	// that rejects check() falls back to a full reload of the preview page.
-	// (The historic reload loop came from zombie multi-container HMR clients,
-	// gone since dev-remote injection became once-per-page; the silent-freeze
-	// class is prevented at the source by emitOnErrors: false above for failed
-	// builds, and by the AppDescriptor jsx anchor for JSX-free saves.)
+	// Disable automatic reload as a workaround while diagnosing a preview loop.
+	// Refresh the browser manually after edits.
 	// lazyCompilation stays off: compile-on-request made every served bundle
 	// one hash behind, so the dev client always saw itself as stale.
 	// client: the bundle runs INSIDE the preview shell's page (a different
@@ -83,7 +79,7 @@ export default defineConfig(() => ({
 	// from that page's location and never reaches this dev server. '<port>'
 	// is rsbuild's runtime placeholder for the ACTUAL port, so dynamic port
 	// assignment keeps working.
-	dev: { hmr: true, lazyCompilation: false, client: { protocol: 'ws', host: 'localhost', port: '<port>' } as const },
+	dev: { hmr: false, liveReload: false, lazyCompilation: false, client: { protocol: 'ws', host: 'localhost', port: '<port>' } as const },
 	source: { entry: { index: './src/index.ts' } },
 	output: { assetPrefix: 'auto' },
 }));

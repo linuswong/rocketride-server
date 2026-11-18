@@ -81,7 +81,13 @@ function validateResult(tool: string, value: unknown): Record<string, unknown> {
 export async function invokeRead(client: ToolClient, token: string, tool: string, input: Record<string, unknown>): Promise<Evidence> {
  if (!allowedTools.has(tool)) return { tool, status: 'error', error: 'Operation is not available in the read-only console.' };
  try {
-  const data = validateResult(tool, await client.tool({ token, tool, nodeId: 'tool_auth0_1', input }));
+  const response = await client.tool({ token, tool, nodeId: 'tool_auth0_1', input });
+  if (response && typeof response === 'object' && (response as Record<string, unknown>).success === false) {
+   const r = response as Record<string, unknown>;
+   const retry = typeof r.retry_after_seconds === 'number' ? ` Retry after ${r.retry_after_seconds} seconds.` : '';
+   return { tool, input, status: 'error', error: `${typeof r.error_code === 'string' ? r.error_code : 'Tool request failed.'}${retry}` };
+  }
+  const data = validateResult(tool, response);
   return { tool, input, status: 'success', data };
  } catch (error) {
   return { tool, input, status: 'error', error: error instanceof Error ? error.message : 'Tool request failed.' };

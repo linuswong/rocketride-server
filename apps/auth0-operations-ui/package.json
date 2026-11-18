@@ -27,7 +27,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "rocketride": "file:../../.rocketride/client/rocketride.tgz",
-    "shell": "file:../../.rocketride/shell/shell.tgz"
+    "shell": "file:../../.rocketride/shell/shell.tgz",
+    "@xyflow/react": "~12.3.4"
   },
   "devDependencies": {
     "@module-federation/rsbuild-plugin": "2.5.1",

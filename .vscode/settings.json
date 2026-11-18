@@ -1,4 +1,6 @@
 {
+  "rocketride.development.connectionMode": "onprem",
+  "rocketride.development.hostUrl": "http://127.0.0.1:5565",
   "cmake.configureOnOpen": false,
   "cmake.sourceDirectory": "${workspaceFolder}/packages/server",
   "explorer.excludeGitIgnore": true,

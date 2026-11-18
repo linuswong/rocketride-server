@@ -1,0 +1,162 @@
+[
+  {
+    "name": "Avery Cole",
+    "email": "avery.cole@example.com",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "successful_login",
+    "role": "viewer"
+  },
+  {
+    "name": "Morgan Patel",
+    "email": "morgan.patel@example.net",
+    "email_verified": false,
+    "blocked": false,
+    "scenario": "incorrect_password",
+    "role": "operator"
+  },
+  {
+    "name": "Riley Chen",
+    "email": "riley.chen@example.org",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "brute_force_protection",
+    "role": "auditor"
+  },
+  {
+    "name": "Jordan Okafor",
+    "email": "jordan.okafor@example.com",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "never_logged_in",
+    "role": "admin"
+  },
+  {
+    "name": "Taylor Silva",
+    "email": "taylor.silva@example.net",
+    "email_verified": true,
+    "blocked": true,
+    "scenario": "administrative_block",
+    "role": "viewer"
+  },
+  {
+    "name": "Casey Brooks",
+    "email": "casey.brooks@example.org",
+    "email_verified": false,
+    "blocked": false,
+    "scenario": "successful_login",
+    "role": "operator"
+  },
+  {
+    "name": "Quinn Rivera",
+    "email": "quinn.rivera@example.com",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "incorrect_password",
+    "role": "auditor"
+  },
+  {
+    "name": "Cameron Park",
+    "email": "cameron.park@example.net",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "brute_force_protection",
+    "role": "admin"
+  },
+  {
+    "name": "Rowan Ellis",
+    "email": "rowan.ellis@example.org",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "never_logged_in",
+    "role": "viewer"
+  },
+  {
+    "name": "Skyler Diaz",
+    "email": "skyler.diaz@example.com",
+    "email_verified": false,
+    "blocked": true,
+    "scenario": "administrative_block",
+    "role": "operator"
+  },
+  {
+    "name": "Parker Shah",
+    "email": "parker.shah@example.net",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "successful_login",
+    "role": "auditor"
+  },
+  {
+    "name": "Emery Wilson",
+    "email": "emery.wilson@example.org",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "incorrect_password",
+    "role": "admin"
+  },
+  {
+    "name": "Finley Martin",
+    "email": "finley.martin@example.com",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "brute_force_protection",
+    "role": "viewer"
+  },
+  {
+    "name": "Drew Kim",
+    "email": "drew.kim@example.net",
+    "email_verified": false,
+    "blocked": false,
+    "scenario": "never_logged_in",
+    "role": "operator"
+  },
+  {
+    "name": "Alex Moreno",
+    "email": "alex.moreno@example.org",
+    "email_verified": true,
+    "blocked": true,
+    "scenario": "administrative_block",
+    "role": "auditor"
+  },
+  {
+    "name": "Jamie Bennett",
+    "email": "jamie.bennett@example.com",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "successful_login",
+    "role": "admin"
+  },
+  {
+    "name": "Reese Ahmed",
+    "email": "reese.ahmed@example.net",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "incorrect_password",
+    "role": "viewer"
+  },
+  {
+    "name": "Sasha Foster",
+    "email": "sasha.foster@example.org",
+    "email_verified": false,
+    "blocked": false,
+    "scenario": "brute_force_protection",
+    "role": "operator"
+  },
+  {
+    "name": "Dakota Nguyen",
+    "email": "dakota.nguyen@example.com",
+    "email_verified": true,
+    "blocked": false,
+    "scenario": "never_logged_in",
+    "role": "auditor"
+  },
+  {
+    "name": "Robin Hayes",
+    "email": "robin.hayes@example.net",
+    "email_verified": true,
+    "blocked": true,
+    "scenario": "administrative_block",
+    "role": "admin"
+  }
+]
