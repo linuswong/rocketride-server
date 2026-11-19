@@ -88,6 +88,20 @@ export function evaluateReview(evidence:Evidence[], checks:Check[]): ReviewRepor
  if (inventoryOnly) limitations.push('Roles, permissions, applications and connections are not compared with your organization’s policy.');
  return {summary,findings,limitations,aiSuggested:attention};
 }
+export function reviewAnalysisEvidence(workflow: Review['workflow'], evidence: Evidence[]): Evidence[] {
+ if (workflow.id !== 'identity-overview') return evidence;
+ // The overview is page-scoped. Send counts and block status without the inventory records.
+ return evidence.map(({tool, status, data}) => {
+  const counts: Record<string, unknown> = {};
+  if (status === 'success' && typeof data?.count === 'number') counts.page_count = data.count;
+  if (status === 'success' && tool === 'list_users' && Array.isArray(data?.users)) {
+   counts.administratively_blocked_on_page = data.users.filter(user => user?.blocked === true).length;
+   counts.unknown_block_status_on_page = data.users.filter(user => typeof user?.blocked !== 'boolean').length;
+  }
+  return {tool, status, data: counts};
+ });
+}
+
 export async function executeReview(initial:Review, client:ToolClient, token:string, analyze:(evidence:Evidence[])=>Promise<string>, emit:(review:Review)=>void):Promise<Review> {
  let current=initial;
  const update=(id:string,patch:Partial<ReviewStep>)=>{current={...current,steps:current.steps.map(s=>s.id===id?{...s,...patch}:s)};emit(current);};
@@ -119,6 +133,6 @@ export async function executeReview(initial:Review, client:ToolClient, token:str
  start('report'); finish('report',partial || needsAttention?'warning':'completed',report.summary);
  if (evidence.every(e=>e.status==='error')) { if (initial.includeAI) finish('diagnosis','skipped','No successful evidence to analyze.'); return current; }
  if (!initial.includeAI) return current;
- start('diagnosis'); try {const diagnosis=await analyze([...lookupEvidence,...evidence]); current={...current,diagnosis}; finish('diagnosis','completed','AI interpretation received; verify every claim against the evidence.');} catch(error) {finish('diagnosis','failed',error instanceof Error?error.message:'AI analysis failed.');}
+ start('diagnosis'); try {const diagnosis=await analyze(reviewAnalysisEvidence(initial.workflow,[...lookupEvidence,...evidence])); current={...current,diagnosis}; finish('diagnosis','completed','AI analysis received; verify every claim against the evidence.');} catch(error) {finish('diagnosis','failed',error instanceof Error?error.message:'AI analysis failed.');}
  return current;
 }

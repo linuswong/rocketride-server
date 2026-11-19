@@ -5,7 +5,7 @@ function label(key: string): string {
  return key.replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, character => character.toUpperCase());
 }
 
-function Value({ value }: { value: unknown }): React.ReactElement {
+export function Value({ value }: { value: unknown }): React.ReactElement {
  if (value === null) return <span className="data-empty">Not provided (null)</span>;
  if (Array.isArray(value)) {
   if (!value.length) return <span className="data-empty">None</span>;

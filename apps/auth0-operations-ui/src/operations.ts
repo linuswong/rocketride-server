@@ -78,20 +78,24 @@ function validateResult(tool: string, value: unknown): Record<string, unknown> {
  return r;
 }
 
-export async function invokeRead(client: ToolClient, token: string, tool: string, input: Record<string, unknown>): Promise<Evidence> {
+export async function invokeRead(client: ToolClient, token: string, tool: string, input: Record<string, unknown>, timeoutMs = 30000): Promise<Evidence> {
  if (!allowedTools.has(tool)) return { tool, status: 'error', error: 'Operation is not available in the read-only console.' };
+ let timer: ReturnType<typeof setTimeout> | undefined;
  try {
-  const response = await client.tool({ token, tool, nodeId: 'tool_auth0_1', input });
+  const response = await Promise.race([client.tool({ token, tool, nodeId: 'tool_auth0_1', input }), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs); })]);
   if (response && typeof response === 'object' && (response as Record<string, unknown>).success === false) {
    const r = response as Record<string, unknown>;
    const retry = typeof r.retry_after_seconds === 'number' ? ` Retry after ${r.retry_after_seconds} seconds.` : '';
-   return { tool, input, status: 'error', error: `${typeof r.error_code === 'string' ? r.error_code : 'Tool request failed.'}${retry}` };
+   const code = typeof r.error_code === 'string' && /^[A-Z_]{1,40}$/.test(r.error_code) ? r.error_code : 'Tool request failed.';
+   return { tool, input, status: 'error', error: `${code}${retry}` };
   }
   const data = validateResult(tool, response);
   return { tool, input, status: 'success', data };
  } catch (error) {
-  return { tool, input, status: 'error', error: error instanceof Error ? error.message : 'Tool request failed.' };
- }
+  const message = error instanceof Error ? error.message : '';
+  const safe = message === 'TIMEOUT' ? 'The request timed out. The remote request may still be running.' : message.startsWith('Malformed ') ? message : 'Tool request failed. Check the engine connection and integration configuration.';
+  return { tool, input, status: 'error', error: safe };
+ } finally { if (timer) clearTimeout(timer); }
 }
 
 /** Each call starts with an empty evidence list; prior chat messages never supply results. */
@@ -103,9 +107,12 @@ export async function retrieveEvidence(client: ToolClient, token: string, plan: 
  const evidence = [search];
  if (search.status !== 'success') return evidence;
  const users = search.data?.users as Record<string, unknown>[];
- if (users.length !== 1 || typeof users[0].user_id !== 'string' || !users[0].user_id) return evidence;
+ if (users.length !== 1 || typeof users[0].user_id !== 'string' || !users[0].user_id || String(users[0].email).toLowerCase() !== plan.email.toLowerCase()) return evidence;
  const input = { user_id: users[0].user_id };
- for (const tool of ['get_user', 'get_user_logs', 'get_user_blocks']) evidence.push(await invokeRead(client, token, tool, input));
+ const profile = await invokeRead(client, token, 'get_user', input);
+ evidence.push(profile);
+ if (profile.status !== 'success' || profile.data?.user_id !== input.user_id) return evidence;
+ for (const tool of ['get_user_logs', 'get_user_blocks']) evidence.push(await invokeRead(client, token, tool, input));
  return evidence;
 }
 

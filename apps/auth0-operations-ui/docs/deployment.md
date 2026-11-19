@@ -1,0 +1,5 @@
+# Deployment
+
+There is no deployable SupportPilot backend and no connected ticket mode. Do not use the schema experiment or demo inbox for customer records. There is no migration runner or database configuration. `backend/design/001_sqlite_experiment.sql` is tested as a schema experiment in memory and in a temporary local file; it is not an upgrade plan.
+
+Before deployment: establish and test the identity contract in `architecture/identity-contract-investigation.md`; choose an owner and hosting model; implement a server and migrations; provision managed database credentials outside the browser; define TLS, timeouts, auditing, retention, deletion and restore tests; test actual API isolation, concurrent writes and revocation. A single-instance SQLite file needs a durable volume, backups and one-writer constraints; do not use it as a shared multi-instance marketplace store. PostgreSQL is a candidate for multi-user hosting, not yet configured or selected. No deployment, live provider calls or publication were performed.

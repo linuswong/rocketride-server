@@ -17,7 +17,7 @@
         },
         "measured": {
           "width": 150,
-          "height": 68
+          "height": 126
         },
         "nodeType": "default",
         "formDataValid": true
@@ -132,8 +132,8 @@
       },
       "ui": {
         "position": {
-          "x": 460,
-          "y": 370
+          "x": 470,
+          "y": 380
         },
         "measured": {
           "width": 150,
@@ -166,12 +166,43 @@
       },
       "ui": {
         "position": {
-          "x": 80,
-          "y": 370
+          "x": -90,
+          "y": 460
         },
         "measured": {
           "width": 150,
           "height": 79
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "llm_gemini_1",
+      "provider": "llm_gemini",
+      "name": "Gemini",
+      "config": {
+        "profile": "gemini-3_1-flash-lite-preview",
+        "1-pro-preview": {},
+        "name": "Gemini",
+        "models-gemini-3-5-flash": {
+          "apikey": "${ROCKETRIDE_GEMINI_KEY}"
+        },
+        "models-gemini-2-5-flash-batch": {
+          "apikey": "${ROCKETRIDE_GEMINI_KEY}"
+        },
+        "1-flash-lite-preview": {
+          "apikey": "${ROCKETRIDE_GEMINI_KEY}"
+        }
+      },
+      "ui": {
+        "position": {
+          "x": 60,
+          "y": 370
+        },
+        "measured": {
+          "width": 150,
+          "height": 68
         },
         "nodeType": "default",
         "formDataValid": true
@@ -192,10 +223,5 @@
     10,
     10
   ],
-  "docRevision": 31,
-  "viewport": {
-    "x": 0,
-    "y": 0,
-    "zoom": 1
-  }
+  "docRevision": 43
 }

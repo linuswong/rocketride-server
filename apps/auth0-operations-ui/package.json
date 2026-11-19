@@ -2,13 +2,13 @@
   "name": "local-auth0-operations",
   "version": "0.1.0",
   "private": true,
-  "description": "Auth0 Operations Console — a RocketRide app",
+  "description": "LoginLens — a RocketRide app",
   "license": "MIT",
   "appManifest": {
     "id": "local.auth0-operations",
     "publisher": "local",
-    "name": "Auth0 Operations Console",
-    "description": "Auth0 Operations Console — a RocketRide app",
+    "name": "LoginLens",
+    "description": "LoginLens — a RocketRide app",
     "icon": "./icon.svg",
     "readme": "./README.md",
     "categories": [

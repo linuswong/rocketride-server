@@ -32,6 +32,6 @@ test('successful login after failure keeps latest event first; no history does n
 
 test('synthetic pipeline has a fresh isolated agent and no Auth0 tools', () => {
  const pipeline = JSON.parse(readFileSync(new URL('../src/synthetic_investigation.pipe', import.meta.url)));
- assert.deepEqual(pipeline.components.map(component => component.provider).sort(), ['agent_rocketride', 'chat', 'llm_openai_api', 'memory_internal', 'response_answers']);
+ assert.deepEqual(pipeline.components.map(component => component.provider).sort(), ['agent_rocketride', 'chat', 'llm_gemini', 'memory_internal', 'response_answers']);
  assert.equal(pipeline.components.find(component => component.provider === 'agent_rocketride').config.require_tool_call, false);
 });

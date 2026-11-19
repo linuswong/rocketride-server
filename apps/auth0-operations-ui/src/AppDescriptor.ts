@@ -21,8 +21,8 @@ import App from './App';
 
 const descriptor: AppDescriptor = {
 	id: 'local.auth0-operations',
-	name: 'Auth0 Operations Console',
-	branding: { appName: 'Auth0 Operations Console' },
+	name: 'LoginLens',
+	branding: { appName: 'LoginLens' },
 	app: App,
 };
 
