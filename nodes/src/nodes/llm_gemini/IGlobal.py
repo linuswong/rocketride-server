@@ -44,6 +44,15 @@ class IGlobal(IGlobalBase):
 
         Provider-driven exceptions first; simple fallback. Full messages, no truncation.
         """
+        # Validation and execution may run in separate processes. Suppress the
+        # probe entirely when the task is explicitly bounded, including bad values.
+        config = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
+        if config.get('maxProviderAttempts', None) is not None:
+            from .provider_budget import bounded_attempts
+
+            bounded_attempts(config)
+            return
+
         from depends import depends  # type: ignore
 
         requirements = os.path.dirname(os.path.realpath(__file__)) + '/requirements.txt'

@@ -1,4 +1,5 @@
 import type { PIPELINE_RESULT } from 'rocketride';
+import { safeFailure } from './diagnostics.ts';
 
 export function extractAnswers(result: PIPELINE_RESULT): string[] {
  if (!result || typeof result !== 'object' || !result.result_types || typeof result.result_types !== 'object') return [];
@@ -25,7 +26,7 @@ export const prompts = {
 } as const;
 
 const listKeys: Record<string, string> = {
- search_users: 'users', get_user_logs: 'events', search_logs: 'events', list_users: 'users',
+ search_users: 'users', get_user_logs: 'events', search_logs: 'events', search_authentication_history: 'events', list_users: 'users',
  list_roles: 'roles', get_user_roles: 'roles', get_user_permissions: 'permissions',
  list_applications: 'applications', list_connections: 'connections', get_connection_clients: 'clients',
  list_organizations: 'organizations', get_organization_members: 'members',
@@ -72,6 +73,7 @@ function validateResult(tool: string, value: unknown): Record<string, unknown> {
  if (key && (!Array.isArray(r[key]) || !Number.isInteger(r.count) || r.count !== (r[key] as unknown[]).length || !(r[key] as unknown[]).every(v => v && typeof v === 'object' && !Array.isArray(v)))) throw new Error('Malformed tool response: invalid result page.');
  if (tool === 'search_users' && !(r.users as Record<string, unknown>[]).every(item => typeof item.user_id === 'string' && item.user_id.length > 0 && typeof item.email === 'string')) throw new Error('Malformed user search response.');
  if ((tool === 'get_user_logs' || tool === 'search_logs') && !(r.events as Record<string, unknown>[]).every(event => ['log_id', 'date', 'type', 'description'].every(key => key in event && (event[key] === null || typeof event[key] === 'string')))) throw new Error('Malformed event response.');
+ if (tool === 'search_authentication_history' && (!['retrieved','partial'].includes(String(r.coverage)) || !Number.isInteger(r.pages) || (r.pages as number)<1 || (r.pages as number)>5 || !Number.isInteger(r.rejected) || (r.rejected as number) < 0 || !Number.isInteger(r.duplicates) || (r.duplicates as number) < 0 || !(r.reason === null || (typeof r.reason === 'string' && /^[A-Z_]{1,40}$/.test(r.reason))) || !(r.retry_after_seconds === null || (typeof r.retry_after_seconds === 'number' && Number.isFinite(r.retry_after_seconds) && r.retry_after_seconds >= 0)))) throw new Error('Malformed history coverage.');
  if (tool === 'get_user' && (typeof r.user_id !== 'string' || typeof r.blocked !== 'boolean' || !Array.isArray(r.connections))) throw new Error('Malformed user profile.');
  if (tool === 'get_user_blocks' && (typeof r.has_blocks !== 'boolean' || !Array.isArray(r.blocks) || !Number.isInteger(r.block_count) || r.block_count !== r.blocks.length || r.has_blocks !== (r.blocks.length > 0))) throw new Error('Malformed block response.');
  if ((tool === 'get_brute_force_settings' || tool === 'get_ip_throttling_settings') && typeof r.enabled !== 'boolean') throw new Error('Malformed security settings.');
@@ -93,7 +95,7 @@ export async function invokeRead(client: ToolClient, token: string, tool: string
   return { tool, input, status: 'success', data };
  } catch (error) {
   const message = error instanceof Error ? error.message : '';
-  const safe = message === 'TIMEOUT' ? 'The request timed out. The remote request may still be running.' : message.startsWith('Malformed ') ? message : 'Tool request failed. Check the engine connection and integration configuration.';
+  const safe = message === 'TIMEOUT' ? 'The request timed out. The remote request may still be running.' : message.startsWith('Malformed ') ? message : safeFailure(error, 'RocketRide Auth0 tool invocation');
   return { tool, input, status: 'error', error: safe };
  } finally { if (timer) clearTimeout(timer); }
 }

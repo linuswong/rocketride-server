@@ -26,6 +26,12 @@ from ai.common.chat import ChatBase
 from ai.common.config import Config
 from ai.common.llm_adapter import debug_usage_failure, report_llm_tokens
 from google import genai
+from .provider_budget import (
+    BoundedProviderRequestFailed,
+    ProviderAttemptBudget,
+    ProviderAttemptLimitExceeded,
+    bounded_attempts,
+)
 
 
 def _report_gemini_usage(response: Any, model: str) -> None:
@@ -102,6 +108,8 @@ class Chat(ChatBase):
         # Retrieve and validate configuration
         config = Config.getNodeConfig(provider, connConfig)
         api_key = config.get('apikey')
+        limit = bounded_attempts(config)
+        self._attempt_budget = ProviderAttemptBudget(limit) if limit is not None else None
 
         # The C++ engine derives the profile sub-key as the segment after the first underscore
         # of the profile name (e.g. "gemini-2_5-pro" → stored as "5-pro"). Try that fallback.
@@ -119,7 +127,12 @@ class Chat(ChatBase):
         self._modelTotalTokens = config.get('modelTotalTokens', 8192)
 
         # Initialize the Google GenAI client — key format validation is delegated to the library
-        self._client = genai.Client(api_key=api_key)
+        # Explicitly disable SDK transport retries in bounded mode.
+        self._client = (
+            genai.Client(api_key=api_key, http_options={'retry_options': {'attempts': 1}})
+            if limit is not None
+            else genai.Client(api_key=api_key)
+        )
 
         # Store chat instance in shared bag for access by other components
         bag['chat'] = self
@@ -191,7 +204,15 @@ class Chat(ChatBase):
             The model should be a valid Gemini model identifier (e.g., 'gemini-pro').
         """
         # Generate content using the configured model
-        response = self._client.models.generate_content(model=self._model, contents=prompt)
+        budget = getattr(self, '_attempt_budget', None)
+        if budget is not None:
+            budget.reserve()
+        try:
+            response = self._client.models.generate_content(model=self._model, contents=prompt)
+        except Exception:
+            if budget is not None:
+                raise BoundedProviderRequestFailed('Gemini provider request failed') from None
+            raise
 
         # Before the text check, deliberately: a response that carried no text
         # still burned tokens, and a safety block is exactly the run somebody
@@ -223,6 +244,8 @@ class Chat(ChatBase):
         this a safety block would be re-sent — and re-billed — up to
         ``CONST_CHAT_MAX_RETRIES`` times for the same refusal.
         """
-        if isinstance(error, GeminiNoTextError):
+        if getattr(self, '_attempt_budget', None) is not None or isinstance(
+            error, (GeminiNoTextError, ProviderAttemptLimitExceeded)
+        ):
             return False
         return super().is_retryable_error(error)

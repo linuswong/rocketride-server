@@ -437,6 +437,13 @@
 	//		in the shape
 	//
 	"fields": {
+		"gemini.maxProviderAttempts": {
+			"type": "integer",
+			"minimum": 1,
+			"maximum": 1,
+			"title": "Provider attempt limit",
+			"description": "Optional one-attempt limit per Gemini node task; disables the save-time probe."
+		},
 		"gemini.model": {
 			"type": "string",
 			"title": "Model",
@@ -992,7 +999,7 @@
 		{
 			"section": "Pipe",
 			"title": "Gemini",
-			"properties": ["gemini.profile"]
+			"properties": ["gemini.profile", "gemini.maxProviderAttempts"]
 		}
 	],
 	//

@@ -8,7 +8,7 @@ This experimental node attaches to an agent as a read-only Auth0 tool. It search
 
 ## As a tool
 
-Attach this node to an agent to expose these eighteen read-only tools. Results are flat objects with `success`; failures also include `error`, `error_code`, `retryable`, and `retry_after_seconds`. The November 4 contract instead specifies nested `data` and `error` envelopes; this node retains the existing flat envelope.
+Attach this node to an agent to expose these nineteen read-only tools. Results are flat objects with `success`; failures also include `error`, `error_code`, `retryable`, and `retry_after_seconds`. The November 4 contract instead specifies nested `data` and `error` envelopes; this node retains the existing flat envelope.
 
 | Tool | Input | Result and permission |
 | --- | --- | --- |
@@ -23,6 +23,7 @@ Attach this node to an agent to expose these eighteen read-only tools. Results a
 | `list_users` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of `users` and `count`; `read:users`. |
 | `list_applications` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of `applications` and `count`; `read:clients`. |
 | `search_logs` | optional `event_type`, `limit` (1–50, default 20) | One newest-first page of filtered `events` and `count`; `read:logs`. |
+| `search_authentication_history` | `start`, `end` as UTC ISO timestamps with milliseconds | At most five 100-event pages within seven days, sanitized events and retrieval status; `read:logs`. |
 | `get_brute_force_settings` | none | `enabled`, `mode`, `max_attempts`, and `shields`; `read:attack_protection`. |
 | `get_ip_throttling_settings` | none | `enabled`, `shields`, `login_limits`, and `signup_limits`; `read:attack_protection`. |
 | `list_roles` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of tenant `roles` and `count`; `read:roles`. |
@@ -78,6 +79,10 @@ Store client secrets in RocketRide's secure environment settings and use referen
 Authorize a read-only machine-to-machine application for the Auth0 Management API with `read:users`, `read:logs_users`, `read:logs`, `read:connections`, `read:clients`, `read:attack_protection`, `read:roles`, `read:organizations`, and `read:organization_members` as needed for the tools above. In a development tenant, `get_user_logs` succeeded with `read:logs_users` as the only permission selected for a separate application. That application also unexpectedly succeeded at `search_logs`; the reason has not been established, and token claims were not independently inspected. Write credentials are reserved for a future authorized recovery flow and are not needed for the available tools. The node obtains client-credentials tokens for the Management API audience and caches read and write tokens independently.
 
 ## Notes
+
+`search_authentication_history` queries a fixed date range using Auth0's log search. It deduplicates IDs across pages and uses grouping keys scoped to the entire response. `coverage: retrieved` means the query reached a short page, not that Auth0 retained or indexed every event in the interval. `coverage: partial` indicates the five-page limit, duplicate or malformed records, or a later request failure. `reason`, `rejected`, `duplicates`, `pages` and `retry_after_seconds` describe that outcome. A failure on the first page is returned as a normal tool error. Offset pagination and concurrent ingestion can cause gaps. Users should check the tenant's retention and independently verify important results.
+
+For LoginLens, `search_logs` accepts optional `analytics: true`. This view omits user IDs and returns integer `account_group` and `source_group` keys where available. Keys are comparable only within the returned page. Valid Auth0 network-origin coordinates from `location_info` are rounded to whole degrees. Missing coordinates are omitted. The response never includes raw IP addresses. `get_log_event` also accepts `analytics: true` to omit the user ID when inspecting a cited event. Default responses are unchanged.
 
 ### Helpdesk example
 

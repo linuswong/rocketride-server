@@ -28,6 +28,7 @@
 import ipaddress
 import json
 import re
+from datetime import datetime, timezone, timedelta
 
 from ai.common.utils import normalize_tool_input
 from rocketlib import IInstanceBase, tool_function
@@ -357,6 +358,21 @@ def _event(value):
     }
 
 
+def _analytics_fields(item, accounts, sources):
+    """Use page-local grouping keys and coarse network-origin coordinates."""
+    fields = {}
+    for field, groups, key in [('user_id', accounts, 'account_group'), ('ip', sources, 'source_group')]:
+        value = item.get(field)
+        if isinstance(value, str) and value.strip():
+            fields[key] = groups.setdefault(value, len(groups) + 1)
+    location = item.get('location_info')
+    if isinstance(location, dict):
+        lat, lon = location.get('latitude'), location.get('longitude')
+        if type(lat) in (int, float) and -90 <= lat <= 90 and type(lon) in (int, float) and -180 <= lon <= 180:
+            fields.update(latitude=round(lat), longitude=round(lon))
+    return fields
+
+
 def _connection(value):
     """Select nonsecret connection fields without changing connection names."""
     return {
@@ -433,9 +449,117 @@ class IInstance(IInstanceBase):
 
     @tool_function(
         input_schema=_schema(
+            ['start', 'end'],
+            {
+                key: {'type': 'string', 'pattern': r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'}
+                for key in ('start', 'end')
+            },
+        ),
+        output_schema=_output(
+            {
+                'events': {'type': 'array', 'items': {'type': 'object'}},
+                'count': {'type': 'integer'},
+                'coverage': {'type': 'string'},
+                'reason': _STRING,
+                'pages': {'type': 'integer'},
+                'rejected': {'type': 'integer'},
+                'duplicates': {'type': 'integer'},
+                'retry_after_seconds': {'type': ['number', 'null']},
+            }
+        ),
+        description='Retrieve bounded sanitized historical authentication logs; requires read:logs.',
+    )
+    def search_authentication_history(self, args):
+        """Fetch at most five pages, retaining partial data on a later error."""
+
+        def op():
+            data = _input(args, 'search_authentication_history')
+            if set(data) != {'start', 'end'}:
+                raise Auth0Error('INVALID_INPUT', 'Only start and end are accepted.')
+            try:
+                start = datetime.strptime(data['start'], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+                end = datetime.strptime(data['end'], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+            except (KeyError, ValueError, TypeError):
+                raise Auth0Error('INVALID_INPUT', 'Use UTC ISO timestamps.') from None
+            if (
+                start >= end
+                or end - start > timedelta(days=7)
+                or end > datetime.now(timezone.utc) + timedelta(minutes=1)
+            ):
+                raise Auth0Error('INVALID_INPUT', 'The interval must be at most seven days and end in the past.')
+            query = (
+                f'date:[{start.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]}Z TO {end.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]}Z]'
+            )
+            result, seen, accounts, sources = [], set(), {}, {}
+            pages, reason, rejected, duplicates, retry_after = 0, None, 0, 0, None
+            for page in range(5):
+                try:
+                    rows = _list(
+                        self._client().request(
+                            'search_logs',
+                            params={
+                                'page': page,
+                                'per_page': 100,
+                                'sort': 'date:-1',
+                                'q': query,
+                            },
+                        )
+                    )
+                    if len(rows) > 100:
+                        raise Auth0Error('API_ERROR', 'Invalid result page.')
+                except Auth0Error as exc:
+                    if not pages:
+                        raise
+                    reason = exc.code
+                    retry_after = exc.retry_after_seconds
+                    break
+                pages += 1
+                for item in rows:
+                    event = _event(item)
+                    event_id = event['log_id']
+                    if not event_id or not event['date'] or not event['type']:
+                        rejected += 1
+                        continue
+                    try:
+                        event_time = datetime.fromisoformat(event['date'].replace('Z', '+00:00'))
+                        if event_time.tzinfo is None or not start <= event_time <= end:
+                            raise ValueError
+                    except ValueError:
+                        rejected += 1
+                        continue
+                    if event_id in seen:
+                        duplicates += 1
+                        continue
+                    seen.add(event_id)
+                    result.append(
+                        {key: event[key] for key in ('log_id', 'date', 'type', 'description', 'client_name')}
+                        | _analytics_fields(item, accounts, sources)
+                    )
+                if len(rows) < 100:
+                    break
+            else:
+                reason = 'PAGE_LIMIT'
+            if duplicates or rejected:
+                reason = reason or ('DUPLICATE_EVENTS' if duplicates else 'MALFORMED_EVENTS')
+            return {
+                'events': result,
+                'count': len(result),
+                'pages': pages,
+                'coverage': 'partial' if reason else 'retrieved',
+                'reason': reason,
+                'rejected': rejected,
+                'duplicates': duplicates,
+                'retry_after_seconds': retry_after,
+            }
+
+        return _run(op)
+
+    @tool_function(
+        input_schema=_schema(
             [],
             {
                 'event_type': {'type': 'string', 'enum': list(_LOG_TYPES)},
+                'analytics': {'type': 'boolean', 'default': False},
                 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50, 'default': 20},
             },
         ),
@@ -447,6 +571,10 @@ class IInstance(IInstanceBase):
                         'type': 'object',
                         'properties': {
                             key: _STRING for key in ('log_id', 'date', 'type', 'description', 'user_id', 'client_name')
+                        }
+                        | {
+                            key: {'type': 'integer'}
+                            for key in ('account_group', 'source_group', 'latitude', 'longitude')
                         },
                     },
                 },
@@ -461,8 +589,8 @@ class IInstance(IInstanceBase):
         def op():
             """Validate the event type and fetch newest events."""
             data = _input(args, 'search_logs')
-            if set(data) - {'event_type', 'limit'}:
-                raise Auth0Error('INVALID_INPUT', 'Only event_type and limit are accepted.')
+            if set(data) - {'event_type', 'limit', 'analytics'} or not isinstance(data.get('analytics', False), bool):
+                raise Auth0Error('INVALID_INPUT', 'Invalid log search parameters.')
             event_type = data.get('event_type')
             if 'event_type' in data and (not isinstance(event_type, str) or event_type not in _LOG_TYPES):
                 raise Auth0Error('INVALID_INPUT', 'event_type must be a recognized event type.')
@@ -474,6 +602,7 @@ class IInstance(IInstanceBase):
                 params['q'] = f'type:{event_type}'
             events = _list(self._client().request('search_logs', params=params))
             result = []
+            accounts, sources = {}, {}
             for item in events[:limit]:
                 _validate_fields(
                     item, {key: str for key in ('log_id', '_id', 'date', 'type', 'user_id', 'client_name')}
@@ -481,7 +610,11 @@ class IInstance(IInstanceBase):
                 event = _event(item)
                 result.append(
                     {key: event[key] for key in ('log_id', 'date', 'type', 'description', 'client_name')}
-                    | {'user_id': _log_text(item.get('user_id'))}
+                    | (
+                        _analytics_fields(item, accounts, sources)
+                        if data.get('analytics')
+                        else {'user_id': _log_text(item.get('user_id'))}
+                    )
                 )
             return {'events': result, 'count': len(result)}
 
@@ -950,7 +1083,7 @@ class IInstance(IInstanceBase):
         return _run(op)
 
     @tool_function(
-        input_schema=_schema(['log_id'], {'log_id': _ID}),
+        input_schema=_schema(['log_id'], {'log_id': _ID, 'analytics': {'type': 'boolean'}}),
         output_schema=_output({**_EVENT['properties'], 'user_id': _STRING, 'diagnostics': {'type': 'string'}}),
         description='Get an event with allowlisted authentication diagnostics; requires read:logs.',
     )
@@ -959,10 +1092,14 @@ class IInstance(IInstanceBase):
 
         def op():
             """Fetch and sanitize the requested log event."""
-            log_id = _identifier(_input(args, 'get_log_event'), 'log_id')
+            args_data = _input(args, 'get_log_event')
+            if not isinstance(args_data.get('analytics', False), bool):
+                raise Auth0Error('INVALID_INPUT', 'analytics must be boolean.')
+            log_id = _identifier(args_data, 'log_id')
             data = _object(self._client().request('get_log_event', identifier=log_id))
             event = _event(data)
-            return {**event, 'user_id': _log_text(data.get('user_id')), 'diagnostics': event['description']}
+            identity = {} if args_data.get('analytics') else {'user_id': _log_text(data.get('user_id'))}
+            return {**event, **identity, 'diagnostics': event['description']}
 
         return _run(op)
 

@@ -5,8 +5,8 @@ const now = Date.parse('2026-11-18T12:00:00Z');
 const event = (id,type,date='2026-11-18T11:30:00Z') => ({log_id:id,type,date,client_name:'Example'});
 test('normalizes login events, excludes duplicates and invalid or unrelated events',()=>{
  const result=normalize([event('1','s'),event('2','fp'),event('2','fp'),event('3','limit_wc'),event('4','f','bad'),event('','f'),null]);
- assert.equal(result.events.length,2); assert.equal(result.skipped,5);
- assert.deepEqual(result.events.map(e=>e.kind),['success','failure']);
+ assert.equal(result.events.length,3); assert.equal(result.skipped,4);
+ assert.deepEqual(result.events.map(e=>e.kind),['success','failure','protection']);
 });
 test('calculates failure rate and UTC buckets only within the requested window',()=>{
  const {events}=normalize([event('1','s'),event('2','f'),event('3','fu','2026-11-16T12:00:00Z'),event('4','f','2026-11-18T13:00:00Z')]);

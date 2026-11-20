@@ -20,7 +20,11 @@ quota, etc.) surface as a warning that includes the provider's error code, statu
 full message. Image-output models that reject a text-only probe with an
 `INVALID_ARGUMENT` "response modalities" error pass validation, since that is a probe
 artifact rather than a configuration problem. The probe is skipped entirely when no API
-key is present (secure fields are not decrypted at validate time).
+key is present (secure fields are not decrypted at validate time), or when the optional
+`maxProviderAttempts` is set to `1`. In that mode each task’s Gemini node permits one
+outbound attempt, including failed attempts; concurrent callers share that limit. The
+SDK transport is configured for one attempt. The limit is per task, not a spending cap.
+A new task has a new limit.
 
 ## Lanes
 

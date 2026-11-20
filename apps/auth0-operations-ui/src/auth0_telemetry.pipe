@@ -1,0 +1,63 @@
+{
+  "components": [
+    {
+      "id": "tools_1",
+      "provider": "tools",
+      "name": "Tools",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "tools",
+        "name": "Tools"
+      },
+      "ui": {
+        "position": {
+          "x": 570,
+          "y": 280
+        },
+        "measured": {
+          "width": 150,
+          "height": 87
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "tool_auth0_1",
+      "provider": "tool_auth0",
+      "name": "Auth0",
+      "config": {
+        "allowWrite": false,
+        "clientId": "${ROCKETRIDE_AUTH0_CLIENT_ID}",
+        "clientSecret": "${ROCKETRIDE_AUTH0_CLIENT_SECRET}",
+        "domain": "${ROCKETRIDE_AUTH0_DOMAIN}",
+        "type": "tool_auth0",
+        "writeClientId": "",
+        "writeClientSecret": "",
+        "name": "Auth0"
+      },
+      "ui": {
+        "position": {
+          "x": 470,
+          "y": 380
+        },
+        "measured": {
+          "width": 150,
+          "height": 61
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "control": [
+        {
+          "classType": "tool",
+          "from": "tools_1"
+        }
+      ]
+    }
+  ],
+  "project_id": "3c02377e-b186-4fe4-a765-a142258e9f27",
+  "version": 1
+}

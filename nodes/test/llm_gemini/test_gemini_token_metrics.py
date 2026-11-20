@@ -45,7 +45,10 @@ def _load_node_module():
     sys.modules['google'] = pkg
     sys.modules['google.genai'] = stub
     try:
-        spec = importlib.util.spec_from_file_location('_llm_gemini_node', _MOD_PATH)
+        package = types.ModuleType('_llm_gemini_test_package')
+        package.__path__ = [os.path.dirname(_MOD_PATH)]
+        sys.modules[package.__name__] = package
+        spec = importlib.util.spec_from_file_location('_llm_gemini_test_package.gemini', _MOD_PATH)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod

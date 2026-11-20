@@ -51,3 +51,12 @@
 .nav-group .nav-item:hover,.nav-group .nav-item[aria-current=page]{background:#30435f;color:#fff}
 .nav-group .nav-item[aria-current=page]{border-left-color:#fa7659}
 .nav .nav-item:focus-visible{outline:2px solid #fa7659;outline-offset:-2px}
+
+/* Keep the sidebar surface and its text in the same shell theme. */
+.nav { background:var(--rr-bg-paper,#fff); color:var(--rr-text-primary,#1c2737); font-family:var(--rr-font-family,system-ui,sans-serif) }
+.nav .brand-icon { background:var(--rr-brand,#e85d43); color:var(--rr-brand-contrast,#fff) }
+.nav .nav-group .nav-item { color:var(--rr-text-primary,#1c2737); font:inherit; font-size:13px }
+.nav .nav-group .nav-item:hover { background:var(--rr-bg-surface-alt,#f1f3f6); color:var(--rr-text-primary,#1c2737) }
+.nav .nav-group .nav-item[aria-current=page] { background:var(--rr-bg-surface-alt,#f1f3f6); color:var(--rr-text-primary,#1c2737); border-left-color:var(--rr-brand,#e85d43); font-weight:600 }
+.nav .nav-item:focus-visible { outline:2px solid var(--rr-brand,#e85d43); outline-offset:-2px }
+.nav .nav-note { border-color:var(--rr-border,#dce2e9); color:var(--rr-text-secondary,#667085) }

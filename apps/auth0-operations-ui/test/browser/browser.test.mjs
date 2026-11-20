@@ -1,3 +1,4 @@
+/* global process, setTimeout, clearTimeout, URL, console, fetch, WebSocket */
 // Run after building the isolated fixture; uses an installed Chromium browser and CDP.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +10,7 @@ import path from 'node:path';
 
 const browserPath = process.env.SUPPORTPILOT_BROWSER || (process.platform === 'win32' ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' : 'chromium');
 const root = path.resolve('test/browser/dist');
-const waitFor = async (fn, ms = 15000) => { const end = Date.now() + ms; while (Date.now() < end) { try { const result = await fn(); if (result) return result; } catch {} await new Promise(r => setTimeout(r, 50)); } throw new Error('Timed out waiting for browser condition'); };
+const waitFor = async (fn, ms = 15000) => { const end = Date.now() + ms; while (Date.now() < end) { try { const result = await fn(); if (result) return result; } catch { /* Navigation can replace the execution context. */ } await new Promise(r => setTimeout(r, 50)); } throw new Error('Timed out waiting for browser condition'); };
 
 test('offline investigation browser flow, errors, keyboard and responsive layout', {timeout: 45000}, async () => {
  const server = createServer(async (req, res) => { try { const file = path.resolve(root, '.' + (new URL(req.url, 'http://localhost').pathname === '/' ? '/index.html' : new URL(req.url, 'http://localhost').pathname)); if (!file.startsWith(root + path.sep)) throw Error('invalid path'); const ext = path.extname(file); res.setHeader('Content-Type', ({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[ext] || 'application/octet-stream'); res.end(await readFile(file)); } catch { res.writeHead(404).end(); } });
@@ -20,25 +21,100 @@ test('offline investigation browser flow, errors, keyboard and responsive layout
  try {
   const port = await waitFor(async () => (await readFile(path.join(dir,'DevToolsActivePort'),'utf8')).split('\n')[0].trim());
   console.log('Browser started');
-  const page = await (await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(`http://127.0.0.1:${server.address().port}/`)}`, {method:'PUT'})).json();
+  const page = await (await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(`http://127.0.0.1:${server.address().port}/?lens`)}`, {method:'PUT'})).json();
   console.log('Browser page opened');
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve,reject) => { socket.onopen = resolve; socket.onerror = reject; });
   console.log('Browser connected');
   let id = 0; const pending = new Map();
-  socket.onmessage = event => { const msg = JSON.parse(event.data); if (msg.id && pending.has(msg.id)) { const [resolve,reject] = pending.get(msg.id); pending.delete(msg.id); msg.error ? reject(Error(msg.error.message)) : resolve(msg.result); } };
+  socket.onmessage = event => { const msg = JSON.parse(event.data); if (msg.id && pending.has(msg.id)) { const [resolve,reject] = pending.get(msg.id); pending.delete(msg.id); if (msg.error) reject(Error(msg.error.message)); else resolve(msg.result); } };
   const send = (method, params = {}) => new Promise((resolve,reject) => { const seq = ++id; const timer = setTimeout(()=>{pending.delete(seq); reject(Error(`Browser command timed out: ${method}`));},5000); pending.set(seq,[value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);}]); socket.send(JSON.stringify({id:seq,method,params})); });
   const evaluate = async expression => {
    const result = await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true})
     .catch(error => { throw new Error(`${error.message} while evaluating ${expression}`, {cause: error}); });
-   if (result.exceptionDetails) throw Error(result.exceptionDetails.text);
+   if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
    return result.result.value;
   };
   await send('Runtime.enable');
+
+  await send('Emulation.setDeviceMetricsOverride',{width:1200,height:1000,deviceScaleFactor:1,mobile:false});
+  await waitFor(()=>evaluate("!!document.querySelector('.lens-atlas')"));
+  assert.ok(Number((await evaluate("document.querySelector('.lens-user-summary').innerText")).match(/Active users · 30 days\s+(\d+)/)?.[1]) > 400);
+  assert.match(await evaluate("document.querySelector('.lens-user-summary').innerText"),/Inactive users · 30 days\s+14/);
+  assert.match(await evaluate("document.querySelector('.lens-user-summary').innerText"),/Synthetic demo inventory/);
+  await evaluate("location.search='?lens&nogl'");
+  await waitFor(() => evaluate("document.body.innerText.includes('Map unavailable')"));
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"Zoom in\"]').disabled"), true);
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Retry map').click()");
+  await waitFor(() => evaluate("document.body.innerText.includes('Map unavailable')"));
+  await evaluate("document.querySelector('.lens-map-fallback-alerts button').click()");
+  await waitFor(() => evaluate("document.body.innerText.includes('ANOMALY DETAIL')"));
+  await evaluate("location.search='?lens'");
+  await waitFor(()=>evaluate("!!document.querySelector('.lens-atlas canvas')"));
+  await waitFor(()=>evaluate("document.querySelector('.maplibregl-ctrl-attrib') !== null"));
+  const clickMap = async (lon,lat) => {
+   const pos = await evaluate(`(() => { const r=document.querySelector('.lens-atlas canvas').getBoundingClientRect(); const scale=512*2**0.8; const merc=y=>Math.log(Math.tan(Math.PI/4+y*Math.PI/360)); return {x:r.left+r.width/2+${lon}/360*scale,y:r.top+r.height/2-(merc(${lat})-merc(15))/(2*Math.PI)*scale}; })()`);
+   await send('Input.dispatchMouseEvent',{type:'mousePressed',x:pos.x,y:pos.y,button:'left',clickCount:1});
+   await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:pos.x,y:pos.y,button:'left',clickCount:1});
+  };
+  await new Promise(r=>setTimeout(r,1500));
+  await clickMap(-50,-15);
+  await waitFor(()=>evaluate("document.querySelector('.map-caption').innerText.includes('Brazil')"));
+  assert.match(await evaluate("document.querySelector('.map-caption').innerText"),/accounts.*successful/);
+  await clickMap(-0.1,51.5);
+  await waitFor(()=>evaluate("document.querySelector('.map-caption').innerText.includes('Investigate')"));
+  assert.match(await evaluate("document.querySelector('.map-caption').innerText"),/anomal/);
+  await evaluate("document.querySelector('.map-caption button').click()");
+  await waitFor(()=>evaluate("document.body.innerText.includes('INVESTIGATION')"));
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Overview').click()");
+  await waitFor(()=>evaluate("!!document.querySelector('.lens-atlas canvas')"));
+  await evaluate("document.querySelector('[aria-label=\"Activity filter\"]').value='failure'; document.querySelector('[aria-label=\"Activity filter\"]').dispatchEvent(new Event('change',{bubbles:true}))");
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"Activity filter\"]').value"),'failure');
+  await evaluate("document.querySelector('[aria-label=\"Zoom in\"]').click()");
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Fit map').click()");
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Analytics').click()");
+  await evaluate("document.querySelector('.lens-bar-col').click()");
+  await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
+  assert.match(await evaluate("document.body.innerText"),/Manual activity investigation/);
+  assert.equal(await evaluate("document.querySelectorAll('.lens-graph .react-flow__node').length"),0);
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.offsetParent && b.textContent.includes('Propose fixture')).click()");
+  await waitFor(()=>evaluate("document.querySelectorAll('.lens-graph .react-flow__node').length>=2"));
+  assert.match(await evaluate("document.body.innerText"),/Approve and run/);
+  assert.doesNotMatch(await evaluate("document.body.innerText"),/Evidence and next steps/);
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.offsetParent && b.textContent.includes('Approve and run')).click()");
+  await waitFor(()=>evaluate("document.body.innerText.includes('Evidence and next steps')"));
+
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Anomaly Detection').click()");
+  await evaluate("document.querySelector('.lens-alert').click()");
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Propose fixture')).click()");
+  await waitFor(()=>evaluate("document.querySelectorAll('.lens-graph .react-flow__node').length>=2"));
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Approve and run')).click()");
+  await waitFor(()=>evaluate("document.body.innerText.includes('Evidence and next steps')"));
+  await evaluate("document.querySelector('.lens-graph .react-flow__node').click()");
+  await evaluate("document.querySelector('.lens-inspector details summary').click()");
+  assert.match(await evaluate("document.querySelector('.lens-inspector pre').innerText"),/reference/);
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Settings').click()");
+  assert.match(await evaluate("document.body.innerText"),/Settings[\s\S]*RocketRide engine/);
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Investigations').click()");
+  assert.match(await evaluate("document.querySelector('.lens-work h3').innerText"),/Completed/);
+  await evaluate("location.search='?lensmock'");
+  await waitFor(()=>evaluate("!![...document.querySelectorAll('button')].find(b=>b.textContent==='Load tenant events')"));
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Load tenant events').click()");
+  await waitFor(()=>evaluate("document.body.innerText.includes('Tenant snapshot')"));
+  assert.match(await evaluate("document.querySelector('.lens-summary-note').innerText"),/tenant user inventory is not loaded/);
+  assert.doesNotMatch(await evaluate("document.querySelector('.lens-user-summary').innerText"),/Synthetic demo inventory/);
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Anomaly Detection').click()");
+  await evaluate("document.querySelector('.lens-alert').click()");
+  assert.match(await evaluate("document.body.innerText"),/TENANT SNAPSHOT/);
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Overview').click()");
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='View demo').click()");
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Investigations').click()");
+  assert.match(await evaluate("document.body.innerText"),/Select activity from the current snapshot/);
+  await evaluate("location.search=''");
   console.log('Runtime enabled');
   await waitFor(() => evaluate(`!![...document.querySelectorAll('button')].find(x=>x.textContent.includes('Run offline example'))`));
   console.log('Fixture rendered');
-  assert.equal(await evaluate(`document.querySelector('.investigation-options input').checked`), true);
+  assert.equal(await evaluate(`document.querySelector('.investigation-options input').checked`), false);
   assert.equal(await evaluate(`document.querySelector('.investigation-options input').getBoundingClientRect().height > 0`), true);
   assert.equal(await evaluate(`document.querySelector('.react-flow__pane').dispatchEvent(new WheelEvent('wheel', {deltaY: 120, bubbles: true, cancelable: true}))`), true);
   assert.equal(await evaluate(`getComputedStyle(document.querySelector('.inspector')).overscrollBehaviorY`), 'auto');
@@ -76,6 +152,7 @@ test('offline investigation browser flow, errors, keyboard and responsive layout
   assert.equal(await evaluate(`document.body.innerText.includes('sensitive startup detail')`), false);
   await evaluate(`location.search='?slow'`);
   await waitFor(() => evaluate(`document.querySelector('[data-investigation-target]') && !document.body.innerText.includes('Investigation could not be started or completed')`));
+  await evaluate(`document.querySelector('.investigation-options input').click()`);
   await evaluate(`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(document.querySelector('[data-investigation-target]'),'alex@example.com'); document.querySelector('[data-investigation-target]').dispatchEvent(new Event('input',{bubbles:true}));`);
   await evaluate(`document.querySelector('form').requestSubmit()`);
   await waitFor(() => evaluate(`document.querySelector('.react-flow__node[data-id="search"]').textContent.toLowerCase().includes('running')`));

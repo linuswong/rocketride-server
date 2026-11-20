@@ -1,0 +1,99 @@
+{
+  "components": [
+    {
+      "id": "chat_1",
+      "provider": "chat",
+      "name": "Helpdesk chat",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "chat"
+      },
+      "ui": {
+        "position": {
+          "x": 20,
+          "y": 200
+        },
+        "measured": {
+          "width": 150,
+          "height": 68
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "response_answers_1",
+      "provider": "response_answers",
+      "name": "Return Answers",
+      "config": {
+        "laneName": "answers"
+      },
+      "ui": {
+        "position": {
+          "x": 560,
+          "y": 200
+        },
+        "measured": {
+          "width": 150,
+          "height": 68
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "llm_gemini_1"
+        }
+      ]
+    },
+    {
+      "id": "llm_gemini_1",
+      "provider": "llm_gemini",
+      "name": "Gemini",
+      "config": {
+        "profile": "models-gemini-3-1-flash-lite",
+        "1-pro-preview": {},
+        "name": "Gemini",
+        "models-gemini-3-1-flash-lite": {
+          "apikey": "${ROCKETRIDE_GEMINI_KEY}"
+        },
+        "maxProviderAttempts": 1
+      },
+      "ui": {
+        "position": {
+          "x": 80,
+          "y": 370
+        },
+        "measured": {
+          "width": 150,
+          "height": 68
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ]
+    }
+  ],
+  "project_id": "339d571e-d1a4-4ff0-a6f2-b5d510c9c06c",
+  "version": 1,
+  "isLocked": false,
+  "snapToGrid": true,
+  "snapGridSize": [
+    10,
+    10
+  ],
+  "docRevision": 31,
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

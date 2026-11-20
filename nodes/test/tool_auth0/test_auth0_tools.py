@@ -5,6 +5,7 @@
 """Tests for the read-only agent-tool contracts and denied writes."""
 
 import json
+import re
 import importlib.util
 import sys
 import types
@@ -72,6 +73,7 @@ def dispatched_tool(tool, monkeypatch):
         'list_users',
         'list_applications',
         'search_logs',
+        'search_authentication_history',
         'get_brute_force_settings',
         'get_ip_throttling_settings',
         'list_roles',
@@ -154,6 +156,7 @@ def test_registered_schemas(tool):
         'list_users',
         'list_applications',
         'search_logs',
+        'search_authentication_history',
         'get_brute_force_settings',
         'get_ip_throttling_settings',
         'list_roles',
@@ -168,6 +171,45 @@ def test_registered_schemas(tool):
         meta = getattr(instance, name).__tool_meta__
         assert 'required' in meta['input_schema'] and meta['output_schema']['properties']['success']
         assert meta['description']
+
+
+def test_loginlens_planner_adapter_matches_node_input_contracts(tool):
+    """Catch drift between the app's approved adapter and the node tool metadata."""
+    from pathlib import Path
+
+    instance, _, _ = tool
+    source = (Path(__file__).parents[3] / 'apps/auth0-operations-ui/src/lensPlan.ts').read_text(encoding='utf-8')
+    block = source.split('export const registryInputs = {', 1)[1].split('} as const;', 1)[0]
+    entries = dict(re.findall(r'\s*([a-z_]+): \[([^\]]*)\]', block))
+    assert set(entries) == {
+        'get_log_event',
+        'get_brute_force_settings',
+        'get_ip_throttling_settings',
+        'search_authentication_history',
+        'search_logs',
+    }
+    for name, args in entries.items():
+        schema = getattr(instance, name).__tool_meta__['input_schema']
+        fields = set(re.findall(r"'([^']+)'", args))
+        assert set(schema['required']) <= fields <= set(schema['properties'])
+        assert schema['additionalProperties'] is False
+    log_schema = instance.search_logs.__tool_meta__['input_schema']['properties']
+    assert set(log_schema['event_type']['enum']) >= {'f', 'fp', 'fu'}
+    assert log_schema['limit']['maximum'] >= 50
+    assert log_schema['analytics']['type'] == 'boolean'
+    event_schema = instance.get_log_event.__tool_meta__['input_schema']['properties']
+    assert event_schema['analytics']['type'] == 'boolean' and event_schema['log_id']['type'] == 'string'
+    history_schema = instance.search_authentication_history.__tool_meta__['input_schema']['properties']
+    assert history_schema['start']['type'] == history_schema['end']['type'] == 'string'
+    for name in ('search_logs', 'search_authentication_history'):
+        output = getattr(instance, name).__tool_meta__['output_schema']['properties']
+        assert output['events']['type'] == 'array' and output['count']['type'] == 'integer'
+    history_output = instance.search_authentication_history.__tool_meta__['output_schema']['properties']
+    assert {'coverage', 'reason', 'pages', 'rejected', 'duplicates', 'retry_after_seconds'} <= set(history_output)
+    for name in ('get_brute_force_settings', 'get_ip_throttling_settings'):
+        assert (
+            instance.__getattribute__(name).__tool_meta__['output_schema']['properties']['enabled']['type'] == 'boolean'
+        )
 
 
 def test_search_logs_filters_and_bounds_results(tool):
@@ -215,6 +257,57 @@ def test_search_logs_filters_and_bounds_results(tool):
     ]
 
 
+def test_history_pagination_partial_errors_and_limits(tool):
+    instance, client, auth = tool
+    params = {'start': '2026-01-01T00:00:00.000Z', 'end': '2026-01-02T00:00:00.000Z'}
+
+    def event(i):
+        return {'log_id': str(i), 'type': 'fp', 'date': '2026-01-01T12:00:00.000Z', 'user_id': 'account'}
+
+    client.request.side_effect = [[event(i) for i in range(100)], [event(100)]]
+    result = instance.search_authentication_history(params)
+    assert result['coverage'] == 'retrieved' and result['count'] == 101 and result['pages'] == 2
+    assert result['events'][0]['account_group'] == result['events'][-1]['account_group']
+    assert 'user_id' not in result['events'][0]
+    client.request.side_effect = [[event(i) for i in range(100)], [event(99), {'type': 'f'}]]
+    result = instance.search_authentication_history(params)
+    assert result['coverage'] == 'partial' and result['duplicates'] == 1 and result['rejected'] == 1
+    client.request.side_effect = [
+        [event(i) for i in range(100)],
+        auth.Auth0Error('RATE_LIMITED', 'limited', retry_after_seconds=9),
+    ]
+    result = instance.search_authentication_history(params)
+    assert result['coverage'] == 'partial' and result['reason'] == 'RATE_LIMITED' and result['retry_after_seconds'] == 9
+    client.request.side_effect = [[event(i + page * 100) for i in range(100)] for page in range(5)]
+    result = instance.search_authentication_history(params)
+    assert result['count'] == 500 and result['reason'] == 'PAGE_LIMIT'
+    client.request.side_effect = auth.Auth0Error('RATE_LIMITED', 'limited')
+    assert instance.search_authentication_history(params)['error_code'] == 'RATE_LIMITED'
+    assert (
+        instance.search_authentication_history({**params, 'end': '2026-01-10T00:00:00.000Z'})['error_code']
+        == 'INVALID_INPUT'
+    )
+
+
+def test_analytics_uses_page_local_groups_and_optional_coarse_origins(tool):
+    instance, client, _ = tool
+    base = {'log_id': 'log', 'type': 'fp', 'ip': '192.0.2.9', 'user_id': 'private-account'}
+    client.request.return_value = [
+        {**base, 'location_info': {'latitude': 12.6, 'longitude': -6.1}},
+        {**base, 'location_info': {'latitude': 10, 'longitude': 222}},
+        {**base, 'user_id': 'second'},
+    ]
+    result = instance.search_logs({'analytics': True})['events']
+    assert [r['account_group'] for r in result] == [1, 1, 2]
+    assert [r['source_group'] for r in result] == [1, 1, 1]
+    assert (result[0]['latitude'], result[0]['longitude']) == (13, -6)
+    assert all('latitude' not in r for r in result[1:])
+    assert '192.0.2.9' not in str(result) and 'private-account' not in str(result)
+    client.request.return_value = base
+    assert 'user_id' not in instance.get_log_event({'log_id': 'log', 'analytics': True})
+    assert instance.get_log_event({'log_id': 'log'})['user_id'] == 'private-account'
+
+
 def test_diagnostic_tool_schemas_and_scopes(tool):
     instance, _, _ = tool
     meta = instance.search_logs.__tool_meta__
@@ -234,6 +327,10 @@ def test_diagnostic_tool_schemas_and_scopes(tool):
         'description',
         'user_id',
         'client_name',
+        'latitude',
+        'longitude',
+        'source_group',
+        'account_group',
     }
     for method in ('get_brute_force_settings', 'get_ip_throttling_settings'):
         metadata = getattr(instance, method).__tool_meta__

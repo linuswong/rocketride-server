@@ -1,5 +1,5 @@
 .lens{color:#e5edf8;background:#0c1728;border-radius:14px;padding:24px}.lens p{color:#a8b8cb}.lens-top,.lens-card-head,.lens-actions{display:flex;justify-content:space-between;gap:16px;align-items:center}.lens-top h2{font-size:25px;margin:6px 0}.lens-top p{margin:0}.lens-kicker{font-size:10px;letter-spacing:.14em;color:#75a9c7;font-weight:700}.lens-actions label{color:#aabbd0}.lens-actions select{display:block;margin-top:5px;border:1px solid #354760;border-radius:6px;background:#17263b;color:#eef5ff;padding:9px}.lens-notice{margin:20px 0;padding:12px 15px;border:1px solid #33475e;background:#14253a;border-radius:8px;color:#c6d8ea;font-size:12px;line-height:1.5}.lens-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.lens-kpis article,.lens-card{border:1px solid #263951;background:#142238;border-radius:10px;padding:18px}.lens-kpis span,.lens-kpis small{display:block;color:#a7b8cb;font-size:12px}.lens-kpis strong{display:block;font-size:28px;margin:10px 0 4px}.lens-layout{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px}.lens-card h3{margin:8px 0 14px}.lens-card button{padding:9px 12px;background:#223a53;border:1px solid #436079;border-radius:6px;color:#e9f5ff}.lens-origin{min-height:290px}.lens-badge{font-size:10px;letter-spacing:.1em;color:#ffcb8b}.lens-origin-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:180px}.lens-origin-empty p{max-width:400px;margin:8px}.lens-globe{font-size:58px;color:#497994;line-height:1}.lens-foot{font-size:12px!important;color:#9caec3}.lens-chart{height:160px;display:flex;gap:10px;align-items:stretch}.lens-bar-col{flex:1;display:flex;flex-direction:column;min-width:0}.lens-bars{height:135px;display:flex;align-items:end;justify-content:center;gap:4px;border-bottom:1px solid #41526a}.lens-bars span{width:22%;background:#45bada;min-height:0}.lens-bars span+span{background:#fb9a55}.lens-bar-col small{font-size:10px;color:#a8b8cb;text-align:center;margin-top:5px}.lens-blue{color:#45bada}.lens-orange{color:#fb9a55}.lens-category{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #304158;font-size:13px}.lens-disclaimer{font-size:12px!important;margin-bottom:0}@media(max-width:800px){.lens-kpis{grid-template-columns:repeat(2,1fr)}.lens-layout{grid-template-columns:1fr}.lens-top{align-items:flex-start;flex-direction:column}.lens-actions{flex-wrap:wrap}}
-.app:has(.lens){background:#0c1728;color:#e6edf6;padding:clamp(16px,3vw,40px);--rr-text-secondary:#bacadb}
+.app:has(.lens){background:#0c1728;color:#e6edf6;padding:clamp(16px,3vw,40px)}
 .app .lens{max-width:1450px;margin:auto;padding:0}
 .app .lens p{color:#bacadb}
 .app .lens h1{font-size:clamp(24px,3vw,38px);line-height:1.1;letter-spacing:-.04em;margin:7px 0}
@@ -11,3 +11,158 @@
 .map-caption{display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-top:1px solid #304158;padding-top:12px;font-size:13px;color:#b9cadd}
 .map-caption strong{color:white}.lens-kpis strong{font-variant-numeric:tabular-nums}.lens-kpis article:nth-child(2) strong{color:#74d9e3}.lens-kpis article:nth-child(3) strong{color:#ffb17b}
 @media(max-width:1000px){.lens-layout:has(.lens-origin){grid-template-columns:1fr}.lens-actions,.lens-top{flex-wrap:wrap}.lens-top{flex-direction:row}}
+.app .lens{font-family:Geist,Inter,'Segoe UI',sans-serif;background:#051424;color:#d4e4fa}
+.app:has(.lens){background:#051424}
+.app .lens-card,.app .lens-kpis article{background:#0d1c2d;border:1px solid #2b4053;border-radius:8px}
+.lens .lens-kpis{grid-template-columns:repeat(auto-fit,minmax(115px,1fr));margin:16px 0}
+.lens .lens-atlas{display:block;width:100%;height:clamp(240px,39vh,470px);background:radial-gradient(#284054 1px,transparent 1px) #071725;background-size:18px 18px;touch-action:none;cursor:grab}
+.lens-atlas g{cursor:pointer}.lens-atlas g:focus{outline:2px solid white}
+.lens .map-caption{padding:12px 0 0}.lens .map-caption small{margin-left:auto;color:#aebed0}
+.lens .lens-alert{display:flex;width:100%;align-items:center;gap:14px;text-align:left;border:0;border-top:1px solid #293d4e;background:transparent;padding:13px 2px;border-radius:0}
+.lens-alert span:last-child{margin-left:auto}.lens-risk,.lens-meta,.lens-node small,.lens-kicker{font-family:ui-monospace,Consolas,monospace}.lens-risk{color:#ffc179}.lens-risk.High{color:#ffa5a0}
+.lens .lens-chart button{background:transparent;padding:0;border:0}.lens .lens-chart button:hover{background:#20364b}
+.lens-case-head,.lens-case>.lens-card{margin:16px 0}.lens-meta{font-size:12px;color:#99c3db}.lens-case summary{cursor:pointer}.lens-work{position:relative}.lens-graph{height:clamp(380px,62vh,740px);background:#061321;margin:12px 0}
+.lens-graph .react-flow__node.lens-node{width:200px;text-align:left;background:#132638;color:#d4e4fa;border:1px solid #3b5a73;border-left:3px solid #89ceff;box-shadow:none;padding:14px}
+.lens-node strong,.lens-node small,.lens-node span{display:block;overflow-wrap:anywhere}.lens-node small{color:#89ceff;text-transform:uppercase}.lens-node strong{margin:7px 0}.lens-node.success{border-left-color:#62ddba!important}.lens-node.failed{border-left-color:#ff9189!important}.lens-node.running{background:#164664!important}
+.lens-graph .react-flow__controls-button{padding:4px;color:#14354d;background:white}.lens-inspector{background:#172c3f;border:1px solid #49617a;padding:16px;margin-top:12px}.lens-inspector pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.lens .trend-plot{position:relative;height:178px;margin-top:18px}
+.trend-plot svg{position:absolute;inset:0;width:100%;height:calc(100% - 23px)}
+.trend-hit-areas{position:absolute;inset:0;display:flex}
+.lens-card .trend-hit-areas button{display:flex;align-items:center;justify-content:flex-end;min-width:0;padding:0;border:0;border-radius:2px;background:transparent;cursor:crosshair}
+.trend-hit-areas button:hover,.trend-hit-areas button:focus-visible,.trend-hit-areas button[aria-pressed=true]{background:#75c3fc14}
+.lens-trend-caption{font-size:12px;font-variant-numeric:tabular-nums}
+.lens-case dl{display:grid;grid-template-columns:minmax(100px,150px) 1fr;gap:8px 16px}.lens-case dt{color:#95bbd6}.lens-case dd{margin:0}.lens-case article{margin:12px 0;padding:12px;border-top:1px solid #2b4053}
+.app .lens .primary{background:#89ceff;color:#042237;border-color:transparent}.app .lens button:disabled{opacity:.55}
+.app .lens .lens-alerts{min-width:0}.app .lens .lens-layout{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+@media(max-width:1040px){.app .lens .lens-layout{grid-template-columns:1fr}.lens .lens-card-head{flex-wrap:wrap}}
+.lens-map-key span{color:#64cfff}.lens-map-key span:nth-child(2){color:#ffc274}.lens-map-key span:nth-child(3){color:#ff8f87}
+.lens .lens-atlas{cursor:default;position:relative}.lens .lens-atlas .maplibregl-canvas{outline-offset:-2px}.lens .maplibregl-ctrl-attrib{font-size:10px}.lens-map-detail,.lens-map-anomaly{display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%}.lens .map-caption .lens-map-detail small{margin-left:0}.lens-map-anomaly{border-top:1px solid #304158;padding-top:8px}.lens-actions label{display:flex;align-items:center;gap:6px}.lens-actions select{background:#10283a;color:#e6f4ff;border:1px solid #40566c;border-radius:4px;padding:5px}
+
+/* LoginLens follows the active shell theme; the geographic canvas keeps a
+   subdued dark basemap so activity and anomaly layers remain legible. */
+.app:has(.lens), .app .lens { background:var(--rr-bg-default,#f7f8fb); color:var(--rr-text-primary,#1c2737); font-family:var(--rr-font-family,system-ui,sans-serif) }
+.app:has(.lens) { padding:clamp(16px,2.5vw,32px) }
+.app .lens { max-width:1500px }
+.app .lens p, .app .lens .lens-foot { color:var(--rr-text-secondary,#667085) }
+.app .lens h1 { font-size:clamp(24px,2.5vw,32px); letter-spacing:-.025em }
+.lens-top { align-items:end; gap:20px }
+.lens-actions { justify-content:flex-end; flex-wrap:wrap; gap:10px }
+.app .lens label { color:var(--rr-text-secondary,#667085); font-size:12px; margin:0 }
+.lens-actions label { display:flex; align-items:flex-start; flex-direction:column; gap:5px }
+.app .lens select { max-width:100%; min-height:36px; border:1px solid var(--rr-border,#cbd5e1); border-radius:6px; background:var(--rr-bg-input,#fff); color:var(--rr-text-primary,#1c2737); padding:7px 30px 7px 10px; font:inherit }
+.app .lens button { border:1px solid var(--rr-border,#cbd5e1); border-radius:6px; background:var(--rr-bg-paper,#fff); color:var(--rr-text-primary,#1c2737); padding:8px 12px; font:inherit; font-size:12px; font-weight:600; transition:background-color .15s,border-color .15s }
+.app .lens button:hover:not(:disabled) { background:var(--rr-bg-surface-alt,#f1f3f6); border-color:var(--rr-border-hover,#aab5c2) }
+.app .lens button:focus-visible,.app .lens select:focus-visible { outline:3px solid var(--rr-brand,#e85d43); outline-offset:2px }
+.app .lens .primary { background:var(--rr-brand,#e85d43); border-color:var(--rr-brand,#e85d43); color:var(--rr-brand-contrast,#fff); min-height:36px }
+.app .lens .primary:hover:not(:disabled) { filter:brightness(.92); background:var(--rr-brand,#e85d43) }
+.lens-kicker { color:var(--rr-text-secondary,#667085); font-family:var(--rr-font-family,system-ui); letter-spacing:.1em }
+.lens-notice { color:var(--rr-text-secondary,#667085); border-left:3px solid var(--rr-brand,#e85d43); margin:18px 0; padding:5px 10px }
+.app .lens-card,.app .lens-kpis article { background:var(--rr-bg-paper,#fff); border:1px solid var(--rr-border,#dce2e9); border-radius:8px; color:var(--rr-text-primary,#1c2737) }
+.lens .lens-kpis { grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:10px; margin:16px 0 }
+.lens-kpis article { padding:16px 18px }
+.lens-kpis span,.lens-kpis small { color:var(--rr-text-secondary,#667085); line-height:1.4 }
+.lens-kpis strong { font-size:26px; margin:8px 0 0 }
+.lens-kpis article:nth-child(2) strong { color:var(--rr-color-success,#16834f) }
+.lens-kpis article:nth-child(3) strong { color:var(--rr-color-error,#b42318) }
+.lens-origin { padding:18px }
+.lens .lens-atlas { height:clamp(320px,48vh,540px); border-radius:5px; overflow:hidden }
+.lens-map-key { display:flex; flex-wrap:wrap; gap:18px; margin-top:12px; font-size:12px; color:var(--rr-text-secondary,#667085) }
+.lens-map-key span:first-child { color:var(--rr-text-primary,#1c2737) }
+.lens-map-key span:last-child { color:var(--rr-color-error,#b42318) }
+.lens .map-caption { border-color:var(--rr-border,#dce2e9); color:var(--rr-text-secondary,#667085); margin-top:10px; line-height:1.5 }
+.lens .map-caption strong { color:var(--rr-text-primary,#1c2737) }
+.lens .map-caption small { color:var(--rr-text-secondary,#667085) }
+.lens-map-anomaly,.lens-category { border-color:var(--rr-border,#dce2e9) }
+.lens-layout { align-items:start }
+.lens .lens-alert { display:grid; grid-template-columns:auto minmax(120px,1fr); gap:5px 12px; border-color:var(--rr-border,#dce2e9); padding:12px 4px }
+.lens .lens-alert span:nth-child(3) { grid-column:2; font-weight:400; color:var(--rr-text-secondary,#667085); line-height:1.4 }
+.lens .lens-alert span:last-child { grid-column:2; margin:0; color:var(--rr-text-secondary,#667085) }
+.lens-risk { font-family:inherit; color:var(--rr-color-warning,#926000) }
+.lens-risk.High { color:var(--rr-color-error,#b42318) }
+.lens-blue { color:var(--rr-color-success,#16834f) }.lens-orange { color:var(--rr-color-error,#b42318) }
+.lens-meta { color:var(--rr-text-secondary,#667085); overflow-wrap:anywhere }
+.lens-graph { background:var(--rr-bg-default,#f7f8fb); border:1px solid var(--rr-border,#dce2e9); border-radius:6px }
+.lens-graph .react-flow__node.lens-node { background:var(--rr-bg-paper,#fff); color:var(--rr-text-primary,#1c2737); border:1px solid var(--rr-border,#cbd5e1); border-left:4px solid var(--rr-text-disabled,#98a2b3); border-radius:7px }
+.lens-node small { color:var(--rr-text-secondary,#667085); font-family:inherit }
+.lens-node.success { border-left-color:var(--rr-color-success,#16834f)!important }.lens-node.failed { border-left-color:var(--rr-color-error,#b42318)!important }
+.lens-graph .react-flow__node.lens-node.running { background:var(--rr-bg-surface-alt,#f1f3f6)!important; border-left-color:var(--rr-brand,#e85d43)!important }
+.lens-node.skipped { border-left-style:dashed!important }.lens-node.selected { outline:2px solid var(--rr-brand,#e85d43); outline-offset:2px }
+.lens-inspector { background:var(--rr-bg-surface-alt,#f1f3f6); border:1px solid var(--rr-border,#dce2e9); border-radius:6px }
+.lens-inspector pre { max-width:100%; overflow:auto }.lens-case dt { color:var(--rr-text-secondary,#667085) }.lens-case article { border-color:var(--rr-border,#dce2e9) }
+@media(max-width:700px) { .lens-top { align-items:stretch; flex-direction:column }.lens-actions { justify-content:flex-start }.lens .lens-atlas { height:320px }.lens .lens-kpis { grid-template-columns:repeat(2,minmax(0,1fr)) }.lens .map-caption small { margin-left:0 }.lens .lens-alert { grid-template-columns:1fr }.lens .lens-alert span:nth-child(3),.lens .lens-alert span:last-child { grid-column:1 } }
+@media(prefers-reduced-motion:reduce) { .app .lens button,.react-flow__edge.animated path { transition:none; animation:none!important } }
+
+/* Investigation controls share the same layout on Analytics and Investigations. */
+.lens .lens-manual { min-width:0 }
+.lens .lens-manual h3, .lens .lens-investigation-options h3 { margin:0 0 8px }
+.lens .lens-manual > p:not(.lens-foot), .lens .lens-investigation-options > p { margin:0 0 20px; max-width:68ch }
+.lens-manual-fields { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; margin:0 0 20px; max-width:620px }
+.app .lens .lens-manual-fields label { display:grid; gap:6px; min-width:0; color:var(--rr-text-primary,#1c2737) }
+.app .lens .lens-manual-fields select { width:100%; font-weight:400 }
+.lens .lens-manual .lens-foot { margin:12px 0 0; max-width:68ch; line-height:1.5 }
+.lens-investigations { max-width:960px }
+.app .lens .lens-investigations-header { display:block; margin:0 0 24px }
+.lens-investigations-header h1 { margin:0 0 8px!important }
+.lens-investigations-header p { margin:0 }
+.lens-investigations > .lens-card + .lens-card { margin-top:16px }
+.lens-option-actions { display:flex; flex-wrap:wrap; gap:10px }
+/* Keep chart hit targets transparent so they do not obscure the plot. */
+.app .lens .trend-hit-areas button { background:transparent; border:0; padding:0; font-weight:400 }
+.app .lens .trend-hit-areas button:hover,.app .lens .trend-hit-areas button:focus-visible,.app .lens .trend-hit-areas button[aria-pressed=true] { background:color-mix(in srgb, var(--rr-brand,#e85d43) 10%, transparent) }
+
+/* Put failure analysis and review ahead of supporting volume. */
+.lens-summary { margin:24px 0 18px }
+.lens-summary-heading { display:flex; align-items:end; justify-content:space-between; gap:12px }
+.app .lens .lens-summary-heading h2 { margin:4px 0 0; font-size:18px; letter-spacing:-.01em }
+.lens-summary-heading > span { color:var(--rr-text-secondary,#667085); font-size:12px }
+.lens .lens-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); margin:12px 0 0 }
+.lens .lens-kpis .lens-metric { min-width:0; display:flex; flex-direction:column; gap:6px; padding:18px }
+.lens .lens-kpis .lens-metric strong { color:var(--rr-text-primary,#1c2737); margin:0; line-height:1.15 }
+.lens .lens-kpis .lens-metric-failures strong { color:var(--rr-color-error,#b42318) }
+.lens .lens-kpis .lens-metric small { line-height:1.45; overflow-wrap:anywhere }
+.app .lens .lens-metric-link { align-self:flex-start; margin:2px 0 0; padding:0; background:transparent; border:0; color:var(--rr-brand,#c64730); text-align:left }
+.app .lens .lens-metric-link:hover:not(:disabled) { background:transparent; text-decoration:underline }
+@media(max-width:1000px) { .lens .lens-kpis { grid-template-columns:repeat(2,minmax(0,1fr)) } }
+@media(max-width:420px) { .lens-summary-heading { align-items:flex-start; flex-direction:column; gap:4px }.lens .lens-kpis .lens-metric { padding:14px } }
+
+/* Anomalies lead; user counts distinguish observed activity from inventory. */
+.lens .lens-user-summary .lens-metric-anomalies { border-top:3px solid var(--rr-color-error,#b42318); padding-top:16px; background:color-mix(in srgb, var(--rr-color-error,#b42318) 5%, var(--rr-bg-paper,#fff)) }
+.lens .lens-user-summary .lens-metric-anomalies strong { color:var(--rr-color-error,#b42318) }
+.lens .lens-user-summary .lens-metric-unavailable { font-size:18px; line-height:1.65 }
+.app .lens .lens-summary-note { margin:10px 0 0; font-size:12px; line-height:1.5 }
+
+.lens-map-fallback { margin-top:12px; padding:16px; border:1px solid var(--rr-border,#dce2e9); border-radius:6px; background:var(--rr-bg-surface-alt,#f1f3f6) }
+.lens-map-fallback p { margin:6px 0 12px }
+.lens-map-fallback-alerts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px }
+
+.lens .lens-atlas.lens-atlas-unavailable { height:0; min-height:0 }
+
+.lens-report h4 { margin:0 0 8px; font-size:15px; overflow-wrap:anywhere }
+.lens-report dl { margin:14px 0 0 }
+.lens-report dd { line-height:1.5; overflow-wrap:anywhere }
+.lens-report details { margin-top:16px }
+@media(max-width:600px) { .lens-case .lens-report dl { grid-template-columns:1fr; gap:4px }.lens-report dd { margin-bottom:10px } }
+
+/* Keep map controls on the filter's input baseline. */
+.lens .lens-map-actions { align-items:flex-end; gap:8px }
+.lens .lens-map-actions label { gap:4px }
+.lens .lens-map-actions select { margin:0; height:36px }
+.app .lens .lens-map-actions button { min-height:36px }
+
+/* App-wide button padding must not squeeze the React Flow control icons. */
+.app .lens .lens-graph .react-flow__controls-button { display:flex; align-items:center; justify-content:center; width:32px; height:32px; padding:7px; border-radius:0; color:var(--rr-text-primary,#1c2737); background:var(--rr-bg-paper,#fff) }
+.app .lens .lens-graph .react-flow__controls-button svg { display:block; width:16px; height:16px; max-width:none; max-height:none; flex:none; fill:currentColor }
+.app .lens .lens-graph .react-flow__controls-button:disabled { color:var(--rr-text-disabled,#98a2b3) }
+
+/* A clear, evidence-linked conclusion after the investigation graph. */
+.lens-ai-analysis { margin-top:20px; padding:22px; border:1px solid #8a7ad1; border-radius:14px; background:linear-gradient(135deg, rgba(117,90,203,.12), rgba(47,148,192,.08)); }
+.lens-ai-heading { display:flex; gap:14px; align-items:center; }
+.lens-ai-heading h3 { margin:4px 0 0; font-size:20px; }
+.lens-ai-icon { display:grid; place-items:center; flex:none; width:42px; height:42px; border-radius:12px; color:#fff; background:linear-gradient(135deg,#7656c8,#348fbd); font-size:24px; }
+.lens-ai-analysis label { display:block; margin:12px 0; }
+.lens-ai-analysis .lens-ai-disclaimer { font-size:13px; opacity:.8; }
+.lens-ai-analysis .lens-ai-finding { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:16px 0 0; padding:16px 0 0; }
+.lens-ai-finding span { font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--rr-text-secondary,#667085); }
+.lens-ai-finding p { margin:6px 0; line-height:1.5; overflow-wrap:anywhere; }
+.lens-ai-finding button { justify-self:start; }
+@media(max-width:600px) { .lens-ai-analysis { padding:16px; }.lens-ai-analysis .lens-ai-finding { grid-template-columns:1fr; } }
