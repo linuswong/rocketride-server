@@ -1,0 +1,28 @@
+{
+  "components": [
+    {
+      "id": "tools_1",
+      "provider": "tools",
+      "name": "Tools",
+      "config": {"hideForm": true, "mode": "Source", "parameters": {}, "type": "tools", "name": "Tools"}
+    },
+    {
+      "id": "tool_jira_service_management_1",
+      "provider": "tool_jira_service_management",
+      "name": "Jira Service Management",
+      "config": {
+        "type": "tool_jira_service_management",
+        "name": "Jira Service Management",
+        "authMode": "oauth",
+        "domain": "${ROCKETRIDE_JIRA_DOMAIN}",
+        "cloudId": "${ROCKETRIDE_JIRA_CLOUD_ID}",
+        "accessToken": "${ROCKETRIDE_JIRA_ACCESS_TOKEN}",
+        "email": "",
+        "apiToken": ""
+      },
+      "control": [{"classType": "tool", "from": "tools_1"}]
+    }
+  ],
+  "project_id": "aa9d5c72-42f8-4cec-8df1-54e84d8ff66f",
+  "version": 1
+}

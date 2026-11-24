@@ -449,6 +449,112 @@ class IInstance(IInstanceBase):
 
     @tool_function(
         input_schema=_schema(
+            ['email', 'start', 'end'],
+            {
+                'email': {'type': 'string', 'maxLength': 254},
+                'page': {'type': 'integer', 'minimum': 0, 'maximum': 4, 'default': 0},
+                **{
+                    key: {'type': 'string', 'pattern': r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'}
+                    for key in ('start', 'end')
+                },
+            },
+        ),
+        output_schema=_output(
+            {
+                'events': {'type': 'array', 'items': _EVENT},
+                'count': {'type': 'integer'},
+                'page_full': {'type': 'boolean'},
+                'page': {'type': 'integer'},
+                'rejected': {'type': 'integer'},
+            }
+        ),
+        description='Search one bounded page of tenant logs for a submitted email; requires read:logs. A matching submitted identifier does not establish who initiated an attempt or identify a unique account.',
+    )
+    def search_submitted_email_logs(self, args):
+        """Return only locally verified exact submitted-email matches."""
+
+        def op():
+            data = _input(args, 'search_submitted_email_logs')
+            email = data.get('email')
+            page = data.get('page', 0)
+            if isinstance(page, bool) or not isinstance(page, int) or not 0 <= page <= 4:
+                raise Auth0Error('INVALID_INPUT', 'page must be an integer between 0 and 4.')
+            if (
+                not isinstance(email, str)
+                or len(email) > 254
+                or not re.fullmatch(
+                    r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", email
+                )
+                or '..' in email
+                or email.startswith('.')
+                or email.split('@')[0].endswith('.')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'A valid email address is required.')
+            if any(
+                not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
+                for label in email.split('@')[1].split('.')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'A valid email address is required.')
+            if any(
+                not isinstance(data.get(key), str)
+                or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z', data[key])
+                for key in ('start', 'end')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'Use UTC ISO timestamps with milliseconds.')
+            try:
+                start, end = [
+                    datetime.strptime(data[key], '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+                    for key in ('start', 'end')
+                ]
+            except (KeyError, ValueError, TypeError):
+                raise Auth0Error('INVALID_INPUT', 'Use UTC ISO timestamps.') from None
+            if (
+                start >= end
+                or end - start > timedelta(hours=2)
+                or end > datetime.now(timezone.utc) + timedelta(minutes=1)
+            ):
+                raise Auth0Error('INVALID_INPUT', 'The interval must be at most two hours and end in the past.')
+            escaped = re.sub(r'([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)', r'\\\1', email)
+            query = f'user_name:"{escaped}" AND date:[{data["start"]} TO {data["end"]}]'
+            rows = _list(
+                self._client().request(
+                    'search_logs', params={'page': page, 'per_page': 50, 'sort': 'date:-1', 'q': query}
+                )
+            )
+            if len(rows) > 50:
+                raise Auth0Error('API_ERROR', 'Invalid result page.')
+            events, rejected, seen = [], 0, set()
+            for row in rows:
+                event = _event(row)
+                try:
+                    event_time = datetime.fromisoformat(event['date'].replace('Z', '+00:00'))
+                    valid_time = event_time.tzinfo is not None and start <= event_time <= end
+                except (AttributeError, TypeError, ValueError):
+                    valid_time = False
+                if (
+                    not isinstance(row.get('user_name'), str)
+                    or row['user_name'].casefold() != email.casefold()
+                    or not event['log_id']
+                    or not event['type']
+                    or not valid_time
+                    or event['log_id'] in seen
+                ):
+                    rejected += 1
+                    continue
+                seen.add(event['log_id'])
+                events.append(event)
+            return {
+                'events': events,
+                'count': len(events),
+                'page_full': len(rows) == 50,
+                'page': page,
+                'rejected': rejected,
+            }
+
+        return _run(op)
+
+    @tool_function(
+        input_schema=_schema(
             ['start', 'end'],
             {
                 key: {'type': 'string', 'pattern': r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$'}
@@ -601,9 +707,11 @@ class IInstance(IInstanceBase):
             if event_type is not None:
                 params['q'] = f'type:{event_type}'
             events = _list(self._client().request('search_logs', params=params))
+            if len(events) > limit:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid log page.')
             result = []
             accounts, sources = {}, {}
-            for item in events[:limit]:
+            for item in events:
                 _validate_fields(
                     item, {key: str for key in ('log_id', '_id', 'date', 'type', 'user_id', 'client_name')}
                 )
@@ -794,7 +902,9 @@ class IInstance(IInstanceBase):
                 raise Auth0Error('INVALID_INPUT', 'Only page and limit are accepted.')
             page, limit = _pagination(data)
             users = _list(self._client().request('list_users', params={'page': page, 'per_page': limit}))
-            result = [_list_user(item) for item in users[:limit]]
+            if len(users) > limit:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid user page.')
+            result = [_list_user(item) for item in users]
             return {'users': result, 'count': len(result)}
 
         return _run(op)
@@ -814,7 +924,9 @@ class IInstance(IInstanceBase):
                 raise Auth0Error('INVALID_INPUT', 'Only page and limit are accepted.')
             page, limit = _pagination(data)
             applications = _list(self._client().request('list_applications', params={'page': page, 'per_page': limit}))
-            result = [_application(item) for item in applications[:limit]]
+            if len(applications) > limit:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid application page.')
+            result = [_application(item) for item in applications]
             return {'applications': result, 'count': len(result)}
 
         return _run(op)
@@ -1071,12 +1183,58 @@ class IInstance(IInstanceBase):
                     params={'q': f'email:"{escaped}"', 'search_engine': 'v3', 'page': 0, 'per_page': 100},
                 )
             )
+            # A full search page can hide additional exact matches. Do not let
+            # callers infer uniqueness from a truncated provider response.
+            if len(users) >= 100:
+                raise Auth0Error('SEARCH_INCOMPLETE', 'The email search returned a full page; use a user ID.')
             matches = [
                 _user(user)
                 for user in users
                 if isinstance(user.get('email'), str) and user['email'].casefold() == email.casefold()
-            ][:limit]
+            ]
+            if len(matches) > limit:
+                raise Auth0Error('SEARCH_INCOMPLETE', 'The email search exceeded the requested limit; use a user ID.')
             return {'users': matches, 'count': len(matches)}
+
+        return _run(op)
+
+    @tool_function(
+        input_schema=_schema(['email'], {'email': {'type': 'string', 'maxLength': 254}}),
+        output_schema=_output({'users': {'type': 'array', 'items': _USER}, 'count': {'type': 'integer'}}),
+        description='Find profiles by exact case-sensitive email using users-by-email. Matching rows do not establish a unique account or authorization; requires read:users.',
+    )
+    def get_users_by_email(self, args):
+        """Return bounded case-sensitive matches without assuming uniqueness."""
+
+        def op():
+            email = _input(args, 'get_users_by_email').get('email')
+            if (
+                not isinstance(email, str)
+                or len(email) > 254
+                or not re.fullmatch(
+                    r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", email
+                )
+                or '..' in email
+                or email.startswith('.')
+                or email.split('@')[0].endswith('.')
+                or any(
+                    not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
+                    for label in email.split('@')[1].split('.')
+                )
+            ):
+                raise Auth0Error('INVALID_INPUT', 'A valid email address is required.')
+            users = _list(self._client().request('get_users_by_email', params={'email': email}))
+            if len(users) >= 20:
+                raise Auth0Error('SEARCH_INCOMPLETE', 'Too many email matches were returned; use a user ID.')
+            if any(
+                user.get('email') != email or not isinstance(user.get('user_id'), str) or not user['user_id']
+                for user in users
+            ):
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid email lookup response.')
+            result = [_user(user) for user in users]
+            if len({user['user_id'] for user in result}) != len(result):
+                raise Auth0Error('API_ERROR', 'Auth0 returned duplicate accounts.')
+            return {'users': result, 'count': len(result)}
 
         return _run(op)
 
@@ -1150,7 +1308,9 @@ class IInstance(IInstanceBase):
                     'get_user_logs', identifier=user_id, params={'page': page, 'per_page': limit, 'sort': 'date:-1'}
                 )
             )
-            result = [_event(item) for item in events[:limit]]
+            if len(events) > limit:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid log page.')
+            result = [_event(item) for item in events]
             return {'events': result, 'count': len(result)}
 
         return _run(op)
@@ -1362,6 +1522,46 @@ class IInstance(IInstanceBase):
             user_id = _identifier(_input(args, 'get_user_blocks'), 'user_id')
             blocks = _blocks(self._client(), user_id)
             return {'has_blocks': bool(blocks), 'block_count': len(blocks), 'blocks': blocks}
+
+        return _run(op)
+
+    @tool_function(
+        input_schema=_schema(['email'], {'email': {'type': 'string', 'minLength': 3, 'maxLength': 254}}),
+        output_schema=_output({'has_blocks': {'type': 'boolean'}, 'block_count': {'type': 'integer'}}),
+        description='Inspect brute-force records by submitted email, including identifiers without profiles; requires read:users. Records do not establish identity, cause, or effective blocking for the user.',
+    )
+    def get_blocks_by_email(self, args):
+        """Read protection records without returning identifiers or IP addresses."""
+
+        def op():
+            email = _input(args, 'get_blocks_by_email').get('email')
+            if (
+                not isinstance(email, str)
+                or len(email) > 254
+                or not re.fullmatch(
+                    r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", email
+                )
+                or '..' in email
+                or email.startswith('.')
+                or email.split('@')[0].endswith('.')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'A valid email address is required.')
+            if any(
+                not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
+                for label in email.split('@')[1].split('.')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'A valid email address is required.')
+            result = _object(
+                self._client().request(
+                    'get_blocks_by_identifier', params={'identifier': email, 'consider_brute_force_enablement': 'true'}
+                )
+            )
+            if 'blocked_for' not in result:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid block response.')
+            records = _list(result['blocked_for'])
+            if len(records) > 1000:
+                raise Auth0Error('API_ERROR', 'Auth0 returned too many block records.')
+            return {'has_blocks': bool(records), 'block_count': len(records)}
 
         return _run(op)
 

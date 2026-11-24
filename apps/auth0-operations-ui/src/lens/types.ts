@@ -1,4 +1,4 @@
-import type { summarize, OtherEvent } from '../loginLensAnalytics';
+import type { summarize, OtherEvent, Event } from '../loginLensAnalytics';
 import type { Anomaly } from '../lensRules';
 import type { exampleInventory } from '../lensExample';
 import type { LensPage } from './pages';
@@ -18,6 +18,11 @@ export type LensView = {
 	inventory: ReturnType<typeof exampleInventory> | null;
 	navigate: (page: LensPage) => void;
 	openAnomaly: (anomaly: Anomaly) => void;
+	openEvent: (event: Event) => void;
+	eventReviewAvailable: boolean;
+	newFailureIds: string[];
+	newMfaIds: string[];
+	markFailureSeen: (id: string) => void;
 	openAccount: () => void;
 };
 

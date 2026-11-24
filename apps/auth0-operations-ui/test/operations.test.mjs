@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { extractAnswers, interpretAgentOutput, planLookup, retrieveEvidence, invokeRead } from '../src/operations.ts';
 
 const ok = data => ({ success: true, ...data });
-const result = { search_users: ok({users:[{user_id:'auth0|123',email:'test@example.com'}],count:1}), get_user: ok({user_id:'auth0|123',blocked:false,connections:[]}), get_user_logs: ok({events:[{log_id:'log1',date:null,type:'f',description:'Login failed.'}],count:1}), get_user_blocks: ok({has_blocks:false,block_count:0,blocks:[]}), search_logs: ok({events:[],count:0}) };
+const result = { search_users: ok({users:[{user_id:'auth0|123',email:'test@example.com'}],count:1}), get_user: ok({user_id:'auth0|123',email:'test@example.com',blocked:false,connections:[]}), get_user_logs: ok({events:[{log_id:'log1',date:null,type:'f',description:'Login failed.'}],count:1}), get_user_blocks: ok({has_blocks:false,block_count:0,blocks:[]}), search_logs: ok({events:[],count:0}) };
 function clientWith(responses = result) { const calls = []; return { calls, async tool(opts) { calls.push(opts); return responses[opts.tool]; } }; }
 
 test('answer extraction rejects malformed results and guard failures', () => {
@@ -52,6 +52,16 @@ test('unsupported and write tools are not invoked', async () => {
  assert.match(planLookup('delete_user user_id: auth0|123').error,/unavailable/);
  assert.equal((await invokeRead(client,'token','unblock_user',{})).status,'error'); assert.equal(client.calls.length,0);
  assert.match(planLookup('get_user_permissions').error,/user_id/);
+});
+test('named workflow-only tools never silently become a different email or log lookup',async()=>{
+ for(const name of ['search_submitted_email_logs','get_blocks_by_email','search_authentication_history']) {
+  const client=clientWith();
+  const plan=planLookup(`Use ${name} for test@example.com and inspect failed logs`);
+  assert.match(plan.error,/cannot be invoked|available from the account investigation/);
+  assert.equal(plan.tool,undefined); assert.equal(plan.email,undefined);
+  const evidence=await retrieveEvidence(client,'token',plan);
+  assert.equal(evidence[0].status,'error'); assert.equal(client.calls.length,0);
+ }
 });
 test('no identifier is inferred from previous messages or unsupported conclusions', () => {
  assert.deepEqual(planLookup('Is the account blocked?'), {});

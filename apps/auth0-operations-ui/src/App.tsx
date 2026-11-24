@@ -1,11 +1,13 @@
-import { analysisResponseInstructions, parseAnalysisResponse } from './analysisResponse';
+import { analysisResponseInstructions, parseAccountAnalysisResponse } from './analysisResponse';
+import { accountAnalysisPayload } from './accountAnalysis';
+import type { HistoryStop } from './investigation';
 import React, { useCallback, useRef, useState } from 'react';
 import { AppLayout, useAuthUser, useShellConnection } from 'shell';
 import { Question, QuestionType } from 'rocketride';
 import syntheticPipeline from './synthetic_investigation.pipe';
 import plannerPipeline from './planner.pipe';
 import telemetryPipeline from './auth0_telemetry.pipe';
-import { startTelemetryTask } from './telemetryTask';
+import { createSessionTelemetryPipeline, startTelemetryTask, TelemetryTaskMismatchError, TelemetryTaskTimeoutError } from './telemetryTask';
 import { interpretAgentOutput, type Evidence } from './operations';
 // Base styles load first so LoginLens styles take precedence at equal specificity.
 import './styles.css';
@@ -18,15 +20,16 @@ import { LensSidebar } from './lens/LensSidebar';
 
 function AppContents() {
  const { client, isConnected } = useShellConnection();
- const [section, setSection] = useState<LensPage>('Overview');
+ const [section, setSection] = useState<LensPage>('Investigations');
  const [alertCount, setAlertCount] = useState<number | null>(null);
  const [busy, setBusy] = useState(false);
+ const [sessionTelemetry] = useState(() => createSessionTelemetryPipeline(telemetryPipeline));
  const dispatchedChats = useRef(0);
  const ensureTelemetryTask = useCallback(async (): Promise<string> => {
   if (!client || !isConnected) throw new Error('RocketRide is disconnected.');
-  try { return await startTelemetryTask(client, telemetryPipeline); }
-  catch (error) { throw new Error(safeFailure(error, 'RocketRide telemetry task creation')); }
- }, [client, isConnected]);
+  try { return await startTelemetryTask(client, sessionTelemetry); }
+  catch (error) { if (error instanceof TelemetryTaskMismatchError || error instanceof TelemetryTaskTimeoutError) throw error; throw new Error(safeFailure(error, 'RocketRide telemetry task creation')); }
+ }, [client, isConnected, sessionTelemetry]);
  const askModel = useCallback(async (instructions: string, payload: unknown, update?: DiagnosticUpdate): Promise<string> => {
   if (!client || !isConnected) throw new Error('RocketRide is disconnected.');
   let token: string | undefined;
@@ -86,14 +89,17 @@ function AppContents() {
    return answer.text;
   } finally { if (token) void client.terminate(token).catch(() => undefined); }
  }, [client, isConnected]);
- const analyzeInvestigation = useCallback(async (_token:string, evidence:Evidence[]) => {
-   const analysis = parseAnalysisResponse(await askModel(analysisResponseInstructions,evidence));
+ const analyzeInvestigation = useCallback(async (_token:string, evidence:Evidence[], stop?:HistoryStop) => {
+   const payload = accountAnalysisPayload(evidence, stop);
+   const allowed = new Set(payload.checks.filter(check => check.status === 'success').map(check => check.reference));
+   if (!allowed.size) throw new Error('No successful account checks are available for analysis.');
+   const analysis = parseAccountAnalysisResponse(await askModel(analysisResponseInstructions,payload),allowed);
    if (!analysis) throw new Error('The model did not return a valid AI Analysis response.');
    return JSON.stringify(analysis);
  }, [askModel]);
 
  return <AppLayout sidebar={<LensSidebar page={section} navigate={setSection} alertCount={alertCount} />} showStatus><main className="app">
-  <LoginLens page={section} navigate={setSection} onAlertCount={setAlertCount} model={askModel} client={client} connected={isConnected} startData={ensureTelemetryTask} renderAccountInvestigation={active => <AccountInvestigation active={active} client={client} connected={isConnected} start={ensureTelemetryTask} analyze={analyzeInvestigation} busy={busy} setBusy={setBusy} />}/>
+  <LoginLens page={section} navigate={setSection} initialAccountView onAlertCount={setAlertCount} model={askModel} client={client} connected={isConnected} startData={ensureTelemetryTask} renderAccountInvestigation={(active, prefill) => <AccountInvestigation prefill={prefill} active={active} client={client} connected={isConnected} start={ensureTelemetryTask} analyze={analyzeInvestigation} busy={busy} setBusy={setBusy} />}/>
  </main></AppLayout>;
 }
 

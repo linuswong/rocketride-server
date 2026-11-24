@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalize, otherEvents, summarize} from '../src/loginLensAnalytics.ts';
+import {normalize, otherEvents, summarize, mfaSignalLabel} from '../src/loginLensAnalytics.ts';
 const now = Date.parse('2026-11-18T12:00:00Z');
 const event = (id,type,date='2026-11-18T11:30:00Z') => ({log_id:id,type,date,client_name:'Example'});
 test('normalizes login events, excludes duplicates and invalid or unrelated events',()=>{
@@ -22,4 +22,12 @@ test('retains other event types separately from sign-in metrics',()=>{
  const rows=[event('1','mgmt_api_read'),event('2','seccft'),event('2','seccft'),event('3','s'),event('4','other','bad')];
  assert.deepEqual(otherEvents(rows).map(e=>e.type),['mgmt_api_read','seccft']);
  assert.equal(summarize(normalize(rows).events,now,24).success,1);
+});
+
+test('MFA signals stay separate from the sign-in failure rate',()=>{
+ const rows=[event('1','s'),event('2','f'),event('3','gd_auth_failed'),event('4','gd_otp_rate_limit_exceed')];
+ const result=summarize(normalize(rows).events,now,24);
+ assert.equal(result.success,1); assert.equal(result.failure,1); assert.equal(result.rate,50);
+ assert.deepEqual(otherEvents(rows).map(item=>mfaSignalLabel(item.type)),['MFA authentication failed','MFA OTP rate limit reached']);
+ assert.equal(mfaSignalLabel('__proto__'),undefined);
 });

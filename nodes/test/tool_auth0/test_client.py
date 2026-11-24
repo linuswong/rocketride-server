@@ -435,10 +435,12 @@ def test_all_tools_map_remote_errors_through_flat_contract(client, node, operati
     'operation,argument,payload,path',
     [
         ('search_users', {'email': 'jane@example.com'}, [], '/users'),
+        ('get_users_by_email', {'email': 'jane@example.com'}, [], '/users-by-email'),
         ('get_user', {'user_id': 'auth0|1'}, {'user_id': 'auth0|1'}, '/users/auth0%7C1'),
         ('get_user_logs', {'user_id': 'auth0|1'}, [], '/users/auth0%7C1/logs'),
         ('get_log_event', {'log_id': 'log1'}, {'log_id': 'log1'}, '/logs/log1'),
         ('get_user_blocks', {'user_id': 'auth0|1'}, {'blocked_for': []}, '/user-blocks/auth0%7C1'),
+        ('get_blocks_by_email', {'email': 'a@example.com'}, {'blocked_for': []}, '/user-blocks'),
         ('get_connection', {'connection_id': 'con/1'}, {'id': 'con/1'}, '/connections/con%2F1'),
         ('get_connection_clients', {'connection_id': 'con/1'}, {'clients': []}, '/connections/con%2F1/clients'),
         ('list_connections', {}, [], '/connections'),

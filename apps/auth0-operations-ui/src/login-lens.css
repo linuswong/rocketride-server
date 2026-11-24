@@ -575,6 +575,10 @@
 .lens-agent-consent { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--ll-border); border-radius: 12px; background: var(--ll-surface-2); color: var(--ll-muted); font-size: 13px; font-weight: 400; line-height: 1.5; }
 .lens-agent-consent input { flex: none; margin-top: 3px; }
 .lens-account-input { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.lens-root .lens-case-context { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; margin-top: 14px; }
+.lens-root .lens-case-context label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lens-root .lens-case-context input, .lens-root .lens-case-context textarea, .lens-root .lens-case-handoff { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--ll-border); border-radius: 6px; background: var(--ll-surface); color: var(--ll-text); font: inherit; }
+.lens-root .lens-case-handoff { margin-top: 8px; resize: vertical; }
 .lens-root .lens-account-input input {
 	flex: 1 1 260px;
 	min-width: 0;

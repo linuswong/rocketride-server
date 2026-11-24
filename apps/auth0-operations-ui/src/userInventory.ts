@@ -27,7 +27,7 @@ export async function loadUserInventory(client: ToolClient, token: string, now =
    return result;
   }
   const users = response.data.users as Record<string, unknown>[];
-  if (users.length > PAGE_SIZE) { result.reason = 'Invalid inventory page.'; return result; }
+  if (users.length > PAGE_SIZE) { result.status = page === 0 ? 'error' : 'partial'; result.reason = 'Invalid inventory page.'; return result; }
   for (const user of users) {
    if (typeof user.user_id !== 'string' || !user.user_id || seen.has(user.user_id)) {
     result.reason = 'Inventory changed or returned an invalid user; reload to try again.';

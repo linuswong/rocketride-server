@@ -14,6 +14,10 @@ const protections: Record<string, string> = {
 	limit_sul: 'Account rate limited',
 	limit_mu: 'IP protection',
 };
+const mfaSignals: Record<string,string> = {gd_auth_failed:'MFA authentication failed',gd_auth_rejected:'MFA authentication rejected',gd_otp_rate_limit_exceed:'MFA OTP rate limit reached'};
+export function mfaSignalLabel(type: string): string | undefined {
+ return Object.hasOwn(mfaSignals,type) ? mfaSignals[type] : undefined;
+}
 export type OtherEvent = { id: string; time: number; type: string; app: string };
 export function otherEvents(rows: unknown[]): OtherEvent[] {
 	const seen = new Set<string>();

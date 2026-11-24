@@ -1,4 +1,5 @@
 import React from 'react';
+import { mfaSignalLabel } from '../loginLensAnalytics';
 import { classifyAnomaly, classifications } from '../anomalyClassification';
 import { Card, EmptyState, Icon, Metric } from './ui';
 import { TrendChart } from './charts/TrendChart';
@@ -107,7 +108,7 @@ export const OtherEventsCard = ({ view }: { view: LensView }) => {
 							{view.otherEvents.map((e) => (
 								<tr key={e.id}>
 									<td>{new Date(e.time).toISOString()}</td>
-									<td>{e.type === 'mgmt_api_read' ? 'API read operation' : e.type === 'seccft' ? 'Client credentials exchange' : 'Other event'} <small>({e.type})</small></td>
+									<td>{mfaSignalLabel(e.type) ?? (e.type === 'mgmt_api_read' ? 'API read operation' : e.type === 'seccft' ? 'Client credentials exchange' : 'Other event')} <small>({e.type})</small></td>
 									<td>{e.app}</td>
 								</tr>
 							))}

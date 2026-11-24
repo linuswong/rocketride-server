@@ -8,24 +8,27 @@ This experimental node attaches to an agent as a read-only Auth0 tool. It search
 
 ## As a tool
 
-Attach this node to an agent to expose these twenty-one read-only tools. Results are flat objects with `success`; failures also include `error`, `error_code`, `retryable`, and `retry_after_seconds`. The November 4 contract instead specifies nested `data` and `error` envelopes; this node retains the existing flat envelope.
+Attach this node to an agent to expose these twenty-three read-only tools. Results are flat objects with `success`; failures also include `error`, `error_code`, `retryable`, and `retry_after_seconds`. The November 4 contract instead specifies nested `data` and `error` envelopes; this node retains the existing flat envelope.
 
 | Tool | Input | Result and permission |
 | --- | --- | --- |
-| `search_users` | `email`, optional `limit` (1–20, default 10) | Exact email matches: `users`, `count`; `read:users`. |
+| `search_users` | `email`, optional `limit` (1–20, default 10) | Exact email matches: `users`, `count`; `read:users`. A full provider page or more matches than the requested limit returns `SEARCH_INCOMPLETE` instead of a truncated result. |
+| `get_users_by_email` | `email` | Case-sensitive exact-email lookup using the Auth0 users-by-email endpoint; returns up to 19 matching profiles or `SEARCH_INCOMPLETE`. Matches do not prove uniqueness or authorization; `read:users`. |
 | `get_user` | `user_id` | Sign-in profile, connections and administrative `blocked` state; `read:users`. |
-| `get_user_logs` | `user_id`, optional `limit` (1–50, default 10), optional `page` (0–4, default 0) | One newest-first page of sanitized `events` and `count`; `read:logs_users` was sufficient in a development-tenant test. |
+| `get_user_logs` | `user_id`, optional `limit` (1–50, default 10), optional `page` (0–4, default 0) | One newest-first page of sanitized `events` and `count`; an oversized provider page returns `API_ERROR` instead of being truncated. `read:logs_users` was sufficient in a development-tenant test. |
 | `get_log_event` | `log_id`, optional `analytics`, `include_source`, `include_identity_hint`, `include_fingerprint`, `include_application`, `compare_source` | Filtered event fields and diagnostics; `read:logs`. `include_source` adds the event IP, `include_identity_hint` adds the submitted username, `include_fingerprint` adds validated JA3 and JA4 fingerprints, `include_application` adds the event's client ID, and `compare_source` compares the IP with each attack-protection allowlist and requires `read:attack_protection`. |
 | `get_application_config` | `client_id` | Selected nonsecret application type, token endpoint authentication method and grant-type flags; `read:clients`. |
 | `compare_network_acl_ranges` | `log_id` | Event IP and count of active authentication or tenant ACLs whose positive IP ranges contain it; `read:logs`, `read:network_acls`. |
 | `get_user_blocks` | `user_id` | Brute-force `has_blocks`, `block_count` and `blocks`; `read:users`. |
+| `get_blocks_by_email` | `email` | Brute-force `has_blocks` and `block_count` for a submitted email, including when no profile exists; `read:users`. |
 | `get_connection` | `connection_id` (1–128 characters) | Connection `id`, `name`, and `strategy`; `read:connections`. |
 | `list_connections` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of filtered `connections` and `count`; `(page + 1) * limit` must not exceed 1,000; `read:connections`. |
 | `get_connection_clients` | `connection_id`, optional `limit` (1–50, default 20), optional `cursor` (1–1000 characters) | One page of `clients` containing `client_id`, `count`, and `next_cursor`; `read:connections`. |
-| `list_users` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of `users` and `count`; `read:users`. |
-| `list_applications` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of `applications` and `count`; `read:clients`. |
-| `search_logs` | optional `event_type`, `limit` (1–50, default 20) | One newest-first page of filtered `events` and `count`; `read:logs`. |
+| `list_users` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of `users` and `count`; oversized provider pages return `API_ERROR`. Requires `read:users`. |
+| `list_applications` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of `applications` and `count`; oversized provider pages return `API_ERROR`. Requires `read:clients`. |
+| `search_logs` | optional `event_type`, `limit` (1–50, default 20) | One newest-first page of filtered `events` and `count`; an oversized provider page returns `API_ERROR`. Requires `read:logs`. |
 | `search_authentication_history` | `start`, `end` as UTC ISO timestamps with milliseconds | At most five 100-event pages within seven days, sanitized events and retrieval status; `read:logs`. |
+| `search_submitted_email_logs` | `email`, `start`, `end` as UTC ISO timestamps with milliseconds, optional `page` (0–4, default 0) | One page of up to 50 tenant log rows in a window of at most two hours; exact submitted-email matches only, with `page`, `page_full` and `rejected`; `read:logs`. |
 | `get_brute_force_settings` | none | `enabled`, `mode`, `max_attempts`, and `shields`; `read:attack_protection`. |
 | `get_ip_throttling_settings` | none | `enabled`, `shields`, `login_limits`, and `signup_limits`; `read:attack_protection`. |
 | `list_roles` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of tenant `roles` and `count`; `read:roles`. |
@@ -84,6 +87,10 @@ Authorize a read-only machine-to-machine application for the Auth0 Management AP
 
 ## Notes
 
+`search_submitted_email_logs` escapes the supplied email in a fixed `user_name` and date query and locally verifies the submitted identifier and time on every returned row. It does not return usernames or IP addresses. A submitted email is not proof of the actor or a unique account. A full provider page, rejected rows, retention, indexing, missing submitted identifiers and concurrent changes can hide relevant events. It has not been verified against a live tenant.
+
+`get_blocks_by_email` sends the email as an encoded query parameter to Auth0's read-only blocks-by-identifier endpoint and returns only a count and flag, not identifiers or IPs. These records are separate from administrative profile blocks and do not establish the actor or whether a particular login is effectively blocked. Auth0 notes that allowlisted IPs can still appear in block results. This tool has not been live-verified.
+
 `search_authentication_history` queries a fixed date range using Auth0's log search. It deduplicates IDs across pages and uses grouping keys scoped to the entire response. `coverage: retrieved` means the query reached a short page, not that Auth0 retained or indexed every event in the interval. `coverage: partial` indicates the five-page limit, duplicate or malformed records, or a later request failure. `reason`, `rejected`, `duplicates`, `pages` and `retry_after_seconds` describe that outcome. A failure on the first page is returned as a normal tool error. Offset pagination and concurrent ingestion can cause gaps. Users should check the tenant's retention and independently verify important results.
 
 For LoginLens, `search_logs` accepts optional `analytics: true`. This view omits user IDs and returns integer `account_group` and `source_group` keys where available. Keys are comparable only within the returned page. Valid Auth0 network-origin coordinates from `location_info` are rounded to whole degrees. Missing coordinates are omitted. The response never includes raw IP addresses. `get_log_event` also accepts `analytics: true` to omit the user ID when inspecting a cited event. Default responses are unchanged.
@@ -118,7 +125,7 @@ For authentication errors, check the tenant hostname, application credentials, M
 
 ### Security and limitations
 
-The tools return selected profile, event, connection, application, and protection fields; raw metadata, connection options, log descriptions and tokens are not intentionally returned. Event source IPs are returned only by the explicitly requested source-comparison options and ACL comparison tool described above; analytics history can include coarse coordinates. Diagnostic explanations are fixed text selected by event type. All twenty tools listed above are exposed. The original thirteen read-only tools, including connection-client continuation pagination, have been exercised against a development tenant; the role, permission, organization and ACL additions have not been live-tested. Write operations are unavailable and have not been live tested.
+The tools return selected profile, event, connection, application, and protection fields; raw metadata, connection options, log descriptions and tokens are not intentionally returned. Event source IPs are returned only by the explicitly requested source-comparison options and ACL comparison tool described above; analytics history can include coarse coordinates. Diagnostic explanations are fixed text selected by event type. The original thirteen read-only tools, including connection-client continuation pagination, have been exercised against a development tenant; the role, permission, organization, ACL and submitted-email additions have not been live-tested. Write operations are unavailable and have not been live tested.
 
 ## Upstream docs
 

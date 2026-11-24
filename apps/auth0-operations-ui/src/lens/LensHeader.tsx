@@ -11,6 +11,9 @@ export type HeaderControls = {
 	coverage: string;
 	loadedHours?: number;
 	viewDemo: () => void;
+	comparison?: {ids:string[]; mfaIds:string[]; previousEnd:number};
+	autoRefresh: boolean;
+	setAutoRefresh: (enabled: boolean) => void;
 };
 
 export const LensHeader = ({ view, controls }: { view: LensView; controls: HeaderControls }) => {
@@ -21,7 +24,7 @@ export const LensHeader = ({ view, controls }: { view: LensView; controls: Heade
 		<>
 			<div className="lens-toolbar">
 				<div className="lens-toolbar-status">
-					<StatusPill tone={sample ? 'warning' : updated && !loading ? 'accent' : 'neutral'} live={!sample && !!updated && !loading}>Auth0 · {snapshotLabel}</StatusPill>
+					<StatusPill tone={sample ? 'warning' : updated && !loading ? 'accent' : 'neutral'}>Auth0 · {snapshotLabel}</StatusPill>
 					<StatusPill tone={connected ? 'accent' : 'danger'}>{connected ? 'Engine connected' : 'Engine offline'}</StatusPill>
 				</div>
 				<div className="lens-actions">
@@ -46,6 +49,8 @@ export const LensHeader = ({ view, controls }: { view: LensView; controls: Heade
 					</button>
 				</div>
 			</div>
+			<label className="lens-foot"><input type="checkbox" checked={controls.autoRefresh} disabled={!connected && !controls.autoRefresh} onChange={(event) => controls.setAutoRefresh(event.target.checked)} /> Refresh tenant events every 5 minutes while this monitoring page is visible</label>
+			<p className="lens-foot">Optional refresh makes repeated read-only Auth0 requests. It pauses on other pages or when the browser tab is hidden, stops on incomplete retrieval, an error or disconnect, and does not send notifications. Stopping does not cancel a request already running.</p>
 			<div className="lens-notice" role="status">
 				{sample ? 'Demo · synthetic authentication activity' : loading ? 'Retrieving tenant events…' : updated ? 'Tenant snapshot · ' + new Date(updated).toISOString() : 'Tenant snapshot unavailable'} · {connected ? 'Engine connected' : 'Engine offline'}
 				{!sample && (
@@ -56,9 +61,10 @@ export const LensHeader = ({ view, controls }: { view: LensView; controls: Heade
 					</>
 				)}
 			</div>
+			{controls.comparison && !loading && <p role="status" className="lens-foot">{controls.comparison.ids.length} failed sign-in event(s) newly seen compared with the snapshot requested at {new Date(controls.comparison.previousEnd).toISOString()} (all applications), plus {controls.comparison.mfaIds.length} MFA event(s). {view.newFailureIds.length} sign-in and {view.newMfaIds.length} MFA event(s) remain marked for review in the current snapshot. Late indexing or missing records can affect this comparison; it does not establish when an incident began. <button className="lens-link" onClick={() => view.navigate('Alerts')}>Review events</button></p>}
 			{!sample && updated && (
 				<p className="lens-foot lens-caveat">
-					Historical spike and rate comparisons are unavailable because tenant retention and search completeness have not been independently verified. Geographic and source concentrations describe only the retrieved window.
+					Tenant snapshots can miss events and do not provide background monitoring or notifications. Historical spike and rate comparisons are unavailable because tenant retention and search completeness have not been independently verified. Geographic and source concentrations describe only the retrieved window.
 				</p>
 			)}
 		</>

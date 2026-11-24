@@ -76,6 +76,8 @@ def dispatched_tool(tool, monkeypatch):
         'get_application_config',
         'search_logs',
         'search_authentication_history',
+        'search_submitted_email_logs',
+        'get_blocks_by_email',
         'get_brute_force_settings',
         'get_ip_throttling_settings',
         'list_roles',
@@ -121,6 +123,7 @@ def test_dispatch_accepts_model_input(dispatched_tool):
         ('get_user_logs', {'user_id': 'id'}),
         ('get_log_event', {'log_id': 'id'}),
         ('get_user_blocks', {'user_id': 'id'}),
+        ('get_blocks_by_email', {'email': 'a@example.com'}),
         ('get_connection', {'connection_id': 'id'}),
         ('get_connection_clients', {'connection_id': 'id'}),
         ('list_connections', {}),
@@ -128,6 +131,10 @@ def test_dispatch_accepts_model_input(dispatched_tool):
         ('list_applications', {}),
         ('get_application_config', {'client_id': 'id'}),
         ('search_logs', {}),
+        (
+            'search_submitted_email_logs',
+            {'email': 'a@example.com', 'start': '2026-01-01T00:00:00.000Z', 'end': '2026-01-01T01:00:00.000Z'},
+        ),
         ('get_brute_force_settings', {}),
         ('get_ip_throttling_settings', {}),
         ('list_roles', {}),
@@ -149,6 +156,7 @@ def test_registered_schemas(tool):
     instance, _, _ = tool
     names = {
         'search_users',
+        'get_users_by_email',
         'get_user',
         'get_user_logs',
         'get_log_event',
@@ -162,6 +170,8 @@ def test_registered_schemas(tool):
         'get_application_config',
         'search_logs',
         'search_authentication_history',
+        'search_submitted_email_logs',
+        'get_blocks_by_email',
         'get_brute_force_settings',
         'get_ip_throttling_settings',
         'list_roles',
@@ -426,7 +436,7 @@ def test_search_logs_filters_and_bounds_results(tool):
             'user_agent': 'private-agent',
             'details': {'secret': 'private'},
         }
-    ] * 51
+    ] * 50
     result = instance.search_logs({'event_type': 'fp', 'limit': 50})
     assert result['count'] == len(result['events']) == 50
     assert result['events'][0] == {
@@ -441,6 +451,9 @@ def test_search_logs_filters_and_bounds_results(tool):
     client.request.assert_called_with(
         'search_logs', params={'page': 0, 'per_page': 50, 'sort': 'date:-1', 'q': 'type:fp'}
     )
+    client.request.return_value = [{'type': 'fp', 'description': 'private'}] * 51
+    oversized = instance.search_logs({'event_type': 'fp', 'limit': 50})
+    assert oversized['error_code'] == 'API_ERROR' and 'events' not in oversized and 'private' not in str(oversized)
     client.request.return_value = []
     assert instance.search_logs({}) == {'success': True, 'events': [], 'count': 0}
     client.request.assert_called_with('search_logs', params={'page': 0, 'per_page': 20, 'sort': 'date:-1'})
@@ -706,11 +719,14 @@ def test_inventory_filters_fields_and_caps_page(tool, method, key):
             'signing_keys': ['private'],
         }
         expected = {'client_id': 'c', 'name': 'ApplicationName', 'app_type': 'spa'}
-    client.request.return_value = [entry] * 51
+    client.request.return_value = [entry] * 50
     result = getattr(instance, method)({'page': 99, 'limit': 50})
     assert result == {'success': True, key: [expected] * 50, 'count': 50}
     assert 'private' not in str(result)
     client.request.assert_called_with(method, params={'page': 99, 'per_page': 50})
+    client.request.return_value = [entry] * 51
+    result = getattr(instance, method)({'page': 99, 'limit': 50})
+    assert result['error_code'] == 'API_ERROR' and key not in result and 'private' not in str(result)
     client.request.return_value = [{}]
     result = getattr(instance, method)({'page': 0, 'limit': 1})
     assert result['count'] == 1 and all(value is None for value in result[key][0].values())
@@ -1065,6 +1081,109 @@ def test_search_exact_case_insensitive_and_query_safety(tool):
     assert instance.search_users({'email': 'nobody@example.com'}) == {'success': True, 'users': [], 'count': 0}
 
 
+def test_search_never_returns_a_truncated_page_as_a_unique_match(tool):
+    instance, client, _ = tool
+    client.request.return_value = [{'user_id': '1', 'email': 'a@example.com'}] + [
+        {'user_id': str(index), 'email': 'other@example.com'} for index in range(99)
+    ]
+    result = instance.search_users({'email': 'a@example.com'})
+    assert result['success'] is False and result['error_code'] == 'SEARCH_INCOMPLETE'
+    assert 'users' not in result
+    client.request.return_value = [
+        {'user_id': '1', 'email': 'a@example.com'},
+        {'user_id': '2', 'email': 'a@example.com'},
+    ]
+    result = instance.search_users({'email': 'a@example.com', 'limit': 1})
+    assert result['success'] is False and result['error_code'] == 'SEARCH_INCOMPLETE'
+    assert 'users' not in result
+
+
+def test_submitted_email_log_search_verifies_identity_time_and_query(tool):
+    instance, client, _ = tool
+    client.request.return_value = [
+        {
+            'log_id': 'ok',
+            'date': '2026-01-01T12:00:00.000Z',
+            'type': 'fu',
+            'user_name': 'Jane+tag@EXAMPLE.COM',
+            'ip': '192.0.2.1',
+        },
+        {'log_id': 'other', 'date': '2026-01-01T12:00:00.000Z', 'type': 'fu', 'user_name': 'other@example.com'},
+        {'log_id': 'late', 'date': '2026-01-01T14:00:00.000Z', 'type': 'fu', 'user_name': 'jane+tag@example.com'},
+        {'log_id': 'ok', 'date': '2026-01-01T12:00:00.000Z', 'type': 'fu', 'user_name': 'jane+tag@example.com'},
+    ]
+    args = {'email': 'jane+tag@example.com', 'start': '2026-01-01T11:00:00.000Z', 'end': '2026-01-01T13:00:00.000Z'}
+    result = instance.search_submitted_email_logs(args)
+    assert result['success'] is True and result['count'] == 1 and result['rejected'] == 3
+    assert result['events'][0]['log_id'] == 'ok' and result['page_full'] is False and result['page'] == 0
+    assert 'user_name' not in result['events'][0] and 'ip' not in result['events'][0]
+    params = client.request.call_args.kwargs['params']
+    assert r'user_name:"jane\+tag@example.com"' in params['q']
+    assert params['per_page'] == 50 and params['sort'] == 'date:-1'
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'email': '" OR *:*'},
+        {'start': '2026-01-01T11:00:00.000Z] OR *:*'},
+        {'start': '2026-01-01T10:59:59.000Z'},
+        {'end': '2999-01-01T13:00:00.000Z'},
+    ],
+)
+def test_submitted_email_log_search_rejects_invalid_inputs(tool, change):
+    instance, client, _ = tool
+    args = {
+        'email': 'jane@example.com',
+        'start': '2026-01-01T11:00:00.000Z',
+        'end': '2026-01-01T13:00:00.000Z',
+    } | change
+    assert instance.search_submitted_email_logs(args)['error_code'] == 'INVALID_INPUT'
+    client.request.assert_not_called()
+
+
+def test_submitted_email_log_search_marks_full_provider_page(tool):
+    instance, client, _ = tool
+    client.request.return_value = [
+        {'log_id': str(i), 'date': '2026-01-01T12:00:00Z', 'type': 'fu', 'user_name': 'jane@example.com'}
+        for i in range(50)
+    ]
+    result = instance.search_submitted_email_logs(
+        {'email': 'jane@example.com', 'start': '2026-01-01T11:00:00.000Z', 'end': '2026-01-01T13:00:00.000Z'}
+    )
+    assert result['count'] == 50 and result['page_full'] is True
+
+
+def test_submitted_email_log_search_supports_bounded_followup_pages(tool):
+    instance, client, _ = tool
+    args = {'email': 'jane@example.com', 'start': '2026-01-01T11:00:00.000Z', 'end': '2026-01-01T13:00:00.000Z'}
+    client.request.return_value = []
+    result = instance.search_submitted_email_logs({**args, 'page': 3})
+    assert result['success'] is True and result['page'] == 3
+    assert client.request.call_args.kwargs['params']['page'] == 3
+    for invalid in (-1, 5, True, '1'):
+        client.request.reset_mock()
+        assert instance.search_submitted_email_logs({**args, 'page': invalid})['error_code'] == 'INVALID_INPUT'
+        client.request.assert_not_called()
+
+
+def test_blocks_by_email_uses_read_only_query_and_does_not_return_sensitive_records(tool):
+    instance, client, _ = tool
+    client.request.return_value = {'blocked_for': [{'identifier': 'a@example.com', 'ip': '192.0.2.1'}]}
+    result = instance.get_blocks_by_email({'email': 'a@example.com'})
+    assert result == {'success': True, 'has_blocks': True, 'block_count': 1}
+    client.request.assert_called_once_with(
+        'get_blocks_by_identifier', params={'identifier': 'a@example.com', 'consider_brute_force_enablement': 'true'}
+    )
+    client.request.return_value = {'blocked_for': []}
+    assert instance.get_blocks_by_email({'email': 'a@example.com'})['has_blocks'] is False
+    client.request.return_value = {}
+    assert instance.get_blocks_by_email({'email': 'a@example.com'})['error_code'] == 'API_ERROR'
+    client.request.reset_mock()
+    assert instance.get_blocks_by_email({'email': 'a@example.com\nother'})['error_code'] == 'INVALID_INPUT'
+    client.request.assert_not_called()
+
+
 @pytest.mark.parametrize(
     'args',
     [
@@ -1181,10 +1300,13 @@ def test_log_fields_remove_ip_addresses_but_preserve_benign_colons(tool, value, 
 
 def test_user_logs_maximum_is_enforced(tool):
     instance, client, _ = tool
-    client.request.return_value = [{'log_id': str(i), 'type': 'f'} for i in range(60)]
+    client.request.return_value = [{'log_id': str(i), 'type': 'f'} for i in range(50)]
     result = instance.get_user_logs({'user_id': 'u', 'limit': 50})
     assert result['count'] == 50 and len(result['events']) == 50
     assert client.request.call_args.kwargs['params']['per_page'] == 50
+    client.request.return_value = [{'log_id': str(i), 'type': 'f', 'description': 'private'} for i in range(51)]
+    result = instance.get_user_logs({'user_id': 'u', 'limit': 50})
+    assert result['error_code'] == 'API_ERROR' and 'events' not in result and 'private' not in str(result)
     client.request.reset_mock()
     assert instance.get_user_logs({'user_id': 'u', 'limit': 51})['error_code'] == 'INVALID_INPUT'
     client.request.assert_not_called()
@@ -1341,3 +1463,18 @@ def test_connection_limit_does_not_change_other_list_tools(tool):
     client.request.return_value = []
     assert instance.list_users({'page': 20, 'limit': 50})['success']
     client.request.assert_called_once_with('list_users', params={'page': 20, 'per_page': 50})
+
+
+def test_exact_case_email_lookup_is_bounded_and_verifies_provider_rows(tool):
+    instance, client, _ = tool
+    client.request.return_value = [{'user_id': 'auth0|one', 'email': 'Person@example.com'}]
+    result = instance.get_users_by_email({'email': 'Person@example.com'})
+    assert result['success'] and result['count'] == 1
+    client.request.assert_called_once_with('get_users_by_email', params={'email': 'Person@example.com'})
+    client.request.return_value = [{'user_id': 'auth0|one', 'email': 'person@example.com'}]
+    assert instance.get_users_by_email({'email': 'Person@example.com'})['error_code'] == 'API_ERROR'
+    client.request.return_value = [{'user_id': f'auth0|{i}', 'email': 'Person@example.com'} for i in range(20)]
+    assert instance.get_users_by_email({'email': 'Person@example.com'})['error_code'] == 'SEARCH_INCOMPLETE'
+    client.request.return_value = []
+    assert instance.get_users_by_email({'email': 'Person@example.com'})['count'] == 0
+    assert instance.get_users_by_email({'email': 'bad\n@example.com'})['error_code'] == 'INVALID_INPUT'

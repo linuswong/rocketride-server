@@ -1,0 +1,22 @@
+{
+  "title": "Jira Service Management",
+  "protocol": "tool_jira_service_management://",
+  "classType": ["tool"],
+  "capabilities": ["invoke", "experimental"],
+  "register": "filter",
+  "node": "python",
+  "path": "nodes.tool_jira_service_management",
+  "prefix": "jira_service_management",
+  "description": ["Read selected Jira Service Management Cloud customer request metadata."],
+  "lanes": {},
+  "preconfig": {"default": "default", "profiles": {"default": {"title": "Jira Service Management Cloud", "authMode": "basic", "domain": "", "email": "", "apiToken": "", "cloudId": "", "accessToken": ""}}},
+  "fields": {
+    "jira_service_management.authMode": {"type": "string", "title": "Authentication", "description": "Choose a classic or scoped API token for a personal script, or an externally managed OAuth 2.0 access token.", "default": "basic", "enum": [["basic", "Classic API token"], ["scoped_basic", "Scoped API token"], ["oauth", "OAuth access token"]]},
+    "jira_service_management.domain": {"type": "string", "title": "Cloud domain", "description": "Required for classic API-token and OAuth modes: Atlassian Cloud hostname such as example.atlassian.net.", "default": "", "optional": true},
+    "jira_service_management.email": {"type": "string", "title": "Account email", "description": "Required for either API-token mode.", "default": "", "optional": true},
+    "jira_service_management.apiToken": {"type": "string", "title": "API token", "description": "For either API-token mode: use a RocketRide environment reference. Clear this field when using OAuth.", "default": "", "optional": true, "pattern": "^(?:|\\$\\{ROCKETRIDE_[A-Z0-9_]+\\})$", "secure": true, "ui": {"ui:widget": "ApiKeyWidget"}},
+    "jira_service_management.cloudId": {"type": "string", "title": "Cloud ID", "description": "Required for OAuth and scoped API-token modes: the site's canonical lowercase Cloud ID.", "default": "", "optional": true},
+    "jira_service_management.accessToken": {"type": "string", "title": "OAuth access token", "description": "For OAuth only: use a RocketRide environment reference for an externally managed access token. Clear this field when using API-token authentication.", "default": "", "optional": true, "pattern": "^(?:|\\$\\{ROCKETRIDE_[A-Z0-9_]+\\})$", "secure": true, "ui": {"ui:widget": "ApiKeyWidget"}}
+  },
+  "shape": [{"section": "Pipe", "title": "Jira Service Management Cloud", "properties": ["type", "jira_service_management.authMode", "jira_service_management.domain", "jira_service_management.email", "jira_service_management.apiToken", "jira_service_management.cloudId", "jira_service_management.accessToken"]}]
+}

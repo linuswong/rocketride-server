@@ -2,6 +2,18 @@
 
 **Decision: no deployable identity architecture is established.** Keep the fictional experience. The candidates below remain proposals, not a claim RocketRide cannot support them. No live provider or authenticated engine was contacted.
 
+## Follow-up: task access versus investigation authorization
+
+In this checkout `cmd_data.py` resolves `rrext_process` through `get_task(request, 'task.data')` before forwarding tool calls. `task_conn.py` resolves access to a run for full-user credentials, while task-capability credentials are scoped to their task. This is evidence of task-level access enforcement, not a verified per-ticket or per-account authorization contract: `data_conn.py` forwards the caller's tool name and arguments to the node, and a permitted task may expose multiple tools and identifiers. The code inspected does not establish how a separate LoginLens service verifies the current principal and membership, binds a Jira request to an Auth0 account, or rechecks revocation at each case operation. Do not attach a Jira node to a real-data LoginLens task on the assumption that possession of a task or a browser-supplied issue key supplies those guarantees.
+
+## RocketRide Cloud target
+
+The selected deployment target is RocketRide Cloud. The engine's `push_account_update` rebuilds a full-user connection's account information via the account service after membership-related changes; on an exception it logs the failure and leaves that connection's previous information in place. The inspected code therefore does not by itself prove an authoritative membership refresh on every investigation operation, delivery across Cloud instances, or fail-closed revocation. The Cloud account provider and its operational guarantees are outside this checkout.
+
+The shell's hosted OAuth broker and callback code in this checkout describe Google, Microsoft and Slack, not an Atlassian provider. The Jira node can consume an externally supplied OAuth access token, but that is not a Cloud onboarding, refresh, revocation, or per-operator delegation implementation. A production Jira integration needs an approved Atlassian application and a trusted Cloud token lifecycle; it must not ask each customer to supply an API token as the distributed-app onboarding flow.
+
+The engine file-store resolver enforces scope and `task.store` for team paths using the session account information; personal paths remain accessible across organization changes. This is useful platform-level storage access control, but it is not a verified per-case authorization, transactional case repository, retention policy, or proof of current membership. Do not save customer cases to a personal or team file merely because the frontend can access it. A Cloud implementation still needs a trusted, current-principal and tenant-binding contract and a verified durable store before Jira and Auth0 evidence are linked.
+
 ## Evidence and boundary
 
 The `.rrapp` contains only the app ID; `package.json` marks the app authenticated. The shell mounts the descriptor (`src/AppDescriptor.ts`), and `src/App.tsx` reads `useAuthUser()` and `useShellConnection()`, remounting on connection, user or organization changes. `packages/shell/src/hooks/useAuthUser.ts` returns a browser context populated from `ConnectResult`; it is presentation state and cannot authenticate a separate service.

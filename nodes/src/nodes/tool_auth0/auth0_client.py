@@ -221,6 +221,7 @@ class Auth0Client:
 
         routes = {
             'search_users': ('GET', '/users'),
+            'get_users_by_email': ('GET', '/users-by-email'),
             'list_users': ('GET', '/users'),
             'list_applications': ('GET', '/clients'),
             'get_application_config': ('GET', '/clients/{id}'),
@@ -232,6 +233,7 @@ class Auth0Client:
             'get_user_logs': ('GET', '/users/{id}/logs'),
             'get_log_event': ('GET', '/logs/{id}'),
             'get_user_blocks': ('GET', '/user-blocks/{id}'),
+            'get_blocks_by_identifier': ('GET', '/user-blocks'),
             'get_connection': ('GET', '/connections/{id}'),
             'get_connection_clients': ('GET', '/connections/{id}/clients'),
             'list_connections': ('GET', '/connections'),

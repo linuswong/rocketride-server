@@ -29,6 +29,9 @@ export const LensIntegrations = ({ view }: { view: LensView }) => {
 				<Integration icon="sparkle" name="Gemini" status="Not verified" tone="neutral">
 					<p>AI provider: Gemini, configured in the RocketRide pipeline. Availability is checked when an analysis is requested.</p>
 				</Integration>
+				<Integration icon="investigations" name="Jira Service Management" status="Not connected" tone="neutral">
+					<p>A Jira request key can be recorded in a handoff, but LoginLens does not retrieve or update Jira cases. An experimental Jira Cloud node exists in the source checkout; availability in RocketRide Cloud has not been verified.</p>
+				</Integration>
 			</div>
 			<Card kicker="RULE-BASED DETECTION" title="Detection thresholds" className="lens-thresholds">
 				<dl>

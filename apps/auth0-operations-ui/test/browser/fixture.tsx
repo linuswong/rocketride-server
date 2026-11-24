@@ -9,6 +9,12 @@ import { createRoot } from 'react-dom/client';
 import { InvestigationWorkspace } from '../../src/InvestigationWorkspace';
 import { demoClient } from '../../src/offlineDemo';
 import { SupportPlatform, type SupportPage } from '../../src/SupportPlatform';
+import { AccountInvestigation } from '../../src/AccountInvestigation';
+import { accountAnalysisPayload } from '../../src/accountAnalysis';
+import { parseAccountAnalysisResponse } from '../../src/analysisResponse';
+import type { Evidence } from '../../src/operations';
+import type { HistoryStop } from '../../src/investigation';
+import { TelemetryTaskMismatchError, TelemetryTaskTimeoutError } from '../../src/telemetryTask';
 
 // Exercise the map's no-WebGL fallback without changing production behavior.
 if (new URLSearchParams(location.search).has('nogl')) {
@@ -28,6 +34,30 @@ function Fixture() {
  const lensFrame = (lens: React.ReactElement) => <main className="app lens-fixture"><LensSidebar page={lensPage} navigate={setLensPage} alertCount={alertCount}/>{React.cloneElement(lens, {page:lensPage, navigate:setLensPage, onAlertCount:setAlertCount})}</main>;
  const [events] = useState(() => Array.from({length:4},(_,i)=>({log_id:'mock-'+i,date:new Date(Date.now()-5000-i*1000).toISOString(),type:'fp',description:'Login failed.',account_group:1,source_group:1})));
  const [agentRows] = useState(() => Array.from({length:new URLSearchParams(location.search).has('scenario18')?18:8},(_,i)=>({log_id:`private-event-${i}`,date:new Date(Date.now()-5000-i*1000).toISOString(),type:'fp',description:'Login failed.',account_group:new URLSearchParams(location.search).has('scenario18')?(i===8?1:Math.floor(i/2)+1):i+1,source_group:new URLSearchParams(location.search).has('scenario18')?(i<8?1:2+Math.floor((i-8)/2)):(i<4?1:2),client_name:'private-app'})));
+ if (new URLSearchParams(location.search).has('accountcase')) return <main className="app lens-root"><AccountInvestigation active client={null} connected={false} start={async()=>{throw Error('Offline');}} analyze={async()=>{throw Error('Offline');}} busy={busy} setBusy={setBusy}/></main>;
+ if (new URLSearchParams(location.search).has('accountpages')) {
+  const client = {tool:async ({tool,input}:{tool:string;input:Record<string,unknown>})=>{
+   document.documentElement.dataset.accountCalls=JSON.stringify([...(JSON.parse(document.documentElement.dataset.accountCalls ?? '[]') as string[]),tool]);
+   if (new URLSearchParams(location.search).has('slowaccount') && ['get_user_logs','search_submitted_email_logs'].includes(tool)) await new Promise(resolve=>setTimeout(resolve,600));
+   if (tool === 'search_users') return new URLSearchParams(location.search).has('sharedfailure') ? {success:false,error_code:'RATE_LIMITED'} : new URLSearchParams(location.search).has('nouser') ? {success:true,users:[],count:0} : new URLSearchParams(location.search).has('multi') ? {success:true,users:[{user_id:'auth0|fixture',email:'person@example.com'},{user_id:'google-oauth2|fixture2',email:'person@example.com'}],count:2} : {success:true,users:[{user_id:'auth0|fixture',email:'person@example.com'}],count:1};
+   if (tool === 'get_users_by_email') return {success:true,users:[{user_id:'auth0|fixture',email:input.email}],count:1};
+   if (tool === 'get_user') return {success:true,user_id:input.user_id,email:new URLSearchParams(location.search).has('profilechanged') ? 'other@example.com' : 'person@example.com',blocked:false,connections:[]};
+   if (tool === 'get_user_blocks') return new URLSearchParams(location.search).has('blockscope') ? {success:false,error_code:'MISSING_SCOPE'} : {success:true,has_blocks:false,block_count:0,blocks:[]};
+   if (tool === 'get_blocks_by_email') return new URLSearchParams(location.search).has('refreshfail') && JSON.parse(document.documentElement.dataset.accountCalls ?? '[]').filter((name:string)=>name===tool).length === 2 ? {success:false,error_code:'RATE_LIMITED'} : {success:true,has_blocks:true,block_count:1};
+   if (tool === 'search_submitted_email_logs') { if(new URLSearchParams(location.search).has('refreshfail') && JSON.parse(document.documentElement.dataset.accountCalls ?? '[]').filter((name:string)=>name===tool).length === 2) return {success:false,error_code:'RATE_LIMITED'}; document.documentElement.dataset.submittedQuery=JSON.stringify(input); if(new URLSearchParams(location.search).has('emailpages')) { if(input.page) {if(new URLSearchParams(location.search).has('emailpagefail')) return {success:false,error_code:'RATE_LIMITED'}; const events=[{log_id:'tenant-0',date:'2026-01-01T12:00:00Z',type:'fu',description:'Fictional failure'},{log_id:'tenant-older',date:'2026-01-01T11:59:00Z',type:'fp',description:'Fictional failure'}]; return {success:true,events,count:2,page_full:false,rejected:0,page:input.page};} const events=Array.from({length:50},(_,i)=>({log_id:`tenant-${i}`,date:'2026-01-01T12:00:00Z',type:'fu',description:'Fictional failure'})); return {success:true,events,count:50,page_full:true,rejected:0,page:0}; } return {success:true,events:[{log_id:'tenant-event',date:'2026-01-01T12:00:00Z',type:'fu',description:'Fictional failure',client_name:'Fictional app'}],count:1,page_full:false,rejected:0}; }
+   if (tool === 'get_user_logs') { if (new URLSearchParams(location.search).has('mfa')) {const events=[{log_id:'mfa-fail',date:'2026-01-01T12:00:00Z',type:'gd_auth_failed',description:null},{log_id:'mfa-success',date:'2026-01-01T12:00:01Z',type:'gd_auth_succeed',description:null}]; return {success:true,events,count:events.length};} const events = input.page ? [{log_id:'older',date:'2026-01-01T12:00:00Z',type:'fp',description:'Fictional failure',client_name:'Fictional app'}] : Array.from({length:50},(_,i)=>({log_id:`new-${i}`,date:i===49?'2026-01-01T12:10:00Z':new Date(Date.parse('2026-01-01T14:00:00Z')-i*1000).toISOString(),type:'s',description:'Fictional success',client_name:'Fictional app'})); return {success:true,events,count:events.length}; }
+   return {success:false,error_code:'INVALID_INPUT'};
+  }};
+  const analyze = async (_token:string, evidence:Evidence[], stop?:HistoryStop) => {
+   const payload=accountAnalysisPayload(evidence,stop);
+   document.documentElement.dataset.accountPayload=JSON.stringify(payload);
+   const allowed=new Set(payload.checks.filter(item=>item.status==='success').map(item=>item.reference));
+   const answer=parseAccountAnalysisResponse(JSON.stringify({takeaway:'A failure was returned.',nextStep:'Compare the event.',references:['E4']}),allowed);
+   if (!answer) throw Error('Invalid fixture response');
+   return JSON.stringify(answer);
+  };
+  return <main className="app lens-root" data-fixture="accountpages"><AccountInvestigation active client={client} connected start={async()=> {if(new URLSearchParams(location.search).has('mismatched')) throw new TelemetryTaskMismatchError(); if(new URLSearchParams(location.search).has('starttimeout')) throw new TelemetryTaskTimeoutError('start'); return 'fixture';}} analyze={analyze} busy={busy} setBusy={setBusy}/></main>;
+ }
  if (new URLSearchParams(location.search).has('agentmock')) {
   const rows = agentRows;
   const client = {tool:async ({tool,input}:{tool:string;input:Record<string,unknown>})=>{
@@ -70,18 +100,25 @@ function Fixture() {
    if (calls===1 && data.candidates.some(item=>item.id==='source-2')) return JSON.stringify({decision:'check',candidate:'source-2'});
    return JSON.stringify({decision:'conclude',action:'Do not reset credentials solely for these events.',reason:'The fictional source groups were checked.',uncertainty:'Intent is unknown.',references:['source-accounts','followup-1']});
   };
-  return lensFrame(<LoginLens connected client={client} model={model} startData={async()=> 'fixture'}/>);
+  return lensFrame(<LoginLens connected client={client} model={model} startData={async()=> 'fixture'} renderAccountInvestigation={(active,prefill)=><AccountInvestigation active={active} prefill={prefill} client={client} connected start={async()=> 'fixture'} analyze={async()=>''} busy={busy} setBusy={setBusy}/>}/>);
  }
  if (new URLSearchParams(location.search).has('lensmock') || new URLSearchParams(location.search).has('lensplanner')) {
+  if (new URLSearchParams(location.search).has('fastpoll')) { const realSetTimeout=window.setTimeout.bind(window); window.setTimeout=((handler:TimerHandler, timeout?:number, ...args:unknown[])=>realSetTimeout(handler,timeout===300000 ? 1000 : timeout,...args)) as typeof window.setTimeout; }
   const client = {tool: async (options: {tool:string; input:Record<string,unknown>}) => {
    document.documentElement.dataset.fixtureCalls = String(Number(document.documentElement.dataset.fixtureCalls ?? 0) + 1);
    document.documentElement.dataset.fixtureTools = [document.documentElement.dataset.fixtureTools, options.tool].filter(Boolean).join(',');
+   if (options.tool === 'search_authentication_history' && new URLSearchParams(location.search).has('pollfail') && Number(document.documentElement.dataset.fixtureCalls) >= 2) return {success:false,error_code:'RATE_LIMITED'};
    if (options.tool === 'list_users') { const users = [{user_id:'fixture-active',last_login:new Date(Date.now()-86400000).toISOString()},{user_id:'fixture-inactive',last_login:new Date(Date.now()-40*86400000).toISOString()},{user_id:'fixture-unknown',last_login:null}]; return {success:true,users,count:users.length}; }
+   if (options.tool === 'get_log_event' && new URLSearchParams(location.search).has('failurelead')) return {success:true,...events.find(event=>event.log_id===options.input.log_id),user_id:null,user_name:'person@example.com'};
+   if (options.tool === 'get_log_event' && options.input.log_id === 'fixture-mfa') return {success:true,log_id:'fixture-mfa',type:new URLSearchParams(location.search).has('mfamismatch') ? 'gd_auth_failed' : 'gd_otp_rate_limit_exceed',date:document.documentElement.dataset.mfaTime,description:null,user_id:'auth0|fixture-mfa'};
    if (options.tool === 'get_log_event') return {success:true,...events.find(event => event.log_id === options.input.log_id)};
    if (options.tool === 'get_brute_force_settings') return new URLSearchParams(location.search).has('runfail') ? {success:false,error_code:'DENIED'} : {success:true,enabled:true};
-   return {success:true,events,count:events.length,pages:1,coverage:'retrieved',reason:null,rejected:0,duplicates:0,retry_after_seconds:null};
+   const historyEvents = options.tool === 'search_authentication_history' && new URLSearchParams(location.search).has('fastpoll') && Number(document.documentElement.dataset.fixtureCalls) >= 2 ? [...events,{log_id:'fixture-new-failure',date:String(options.input.end),type:'f',description:'Fictional failure'},{log_id:'fixture-new-mfa',date:String(options.input.end),type:'gd_otp_rate_limit_exceed',description:'Fictional MFA event'}] : events;
+   if (options.tool === 'search_authentication_history' && new URLSearchParams(location.search).has('mfaevents')) document.documentElement.dataset.mfaTime=String(options.input.end);
+   const withMfa = options.tool === 'search_authentication_history' && new URLSearchParams(location.search).has('mfaevents') ? [...historyEvents,{log_id:'fixture-mfa',date:String(options.input.end),type:'gd_otp_rate_limit_exceed',description:'Fictional MFA rate limit'}] : historyEvents;
+   return {success:true,events:withMfa,count:withMfa.length,pages:1,coverage:'retrieved',reason:null,rejected:0,duplicates:0,retry_after_seconds:null};
   }};
-  return lensFrame(<LoginLens connected client={client} model={async(instructions)=>{document.documentElement.dataset.modelCalls=String(Number(document.documentElement.dataset.modelCalls ?? 0)+1); return instructions.startsWith('Interpret the supplied investigation') ? JSON.stringify({findings:[{reference:'event',possibleCause:'A stale credential may explain the failure.',uncertainty:'One event cannot establish intent.',nextStep:'Compare the event with the sign-in report.',possibleRemediation:'If verified, use the standard recovery process.'}]}) : new URLSearchParams(location.search).has('runtime') ? await (await fetch('/' + new URLSearchParams(location.search).get('response'))).text() : new URLSearchParams(location.search).has('badplan') ? '{"steps":[' : '```json\n'+JSON.stringify({steps:[{id:'event',tool:'get_log_event',purpose:'Verify event',expected:'Type and time',depends:[],ref:'E1'},...(new URLSearchParams(location.search).has('runfail') ? [{id:'settings',tool:'get_brute_force_settings',purpose:'Check settings',expected:'Settings',depends:[]}] : [])]})+'\n```';}} startData={async()=> 'fixture'}/>);
+  return lensFrame(<LoginLens connected client={client} model={async(instructions)=>{document.documentElement.dataset.modelCalls=String(Number(document.documentElement.dataset.modelCalls ?? 0)+1); return instructions.startsWith('Interpret the supplied investigation') ? JSON.stringify({findings:[{reference:'event',possibleCause:'A stale credential may explain the failure.',uncertainty:'One event cannot establish intent.',nextStep:'Compare the event with the sign-in report.',possibleRemediation:'If verified, use the standard recovery process.'}]}) : new URLSearchParams(location.search).has('runtime') ? await (await fetch('/' + new URLSearchParams(location.search).get('response'))).text() : new URLSearchParams(location.search).has('badplan') ? '{"steps":[' : '```json\n'+JSON.stringify({steps:[{id:'event',tool:'get_log_event',purpose:'Verify event',expected:'Type and time',depends:[],ref:'E1'},...(new URLSearchParams(location.search).has('runfail') ? [{id:'settings',tool:'get_brute_force_settings',purpose:'Check settings',expected:'Settings',depends:[]}] : [])]})+'\n```';}} startData={async()=> 'fixture'} renderAccountInvestigation={(active,prefill)=><AccountInvestigation active={active} prefill={prefill} client={client} connected start={async()=> 'fixture'} analyze={async()=>''} busy={busy} setBusy={setBusy}/>}/>);
  }
  if (new URLSearchParams(location.search).has('lens')) return lensFrame(<LoginLens connected={false} client={null} model={async()=>{throw Error('Offline');}} startData={async()=>{throw Error('Offline');}}/>);
  if (new URLSearchParams(location.search).has('support')) return <main className="app"><nav>{(['Dashboard','Support Inbox','Investigations','Integrations','Settings'] as SupportPage[]).map(item=><button key={item} onClick={()=>setPage(item)}>{item}</button>)}</nav><SupportPlatform page={page} navigate={setPage}/></main>;

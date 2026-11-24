@@ -30,3 +30,11 @@ test('reports errors and caps without claiming complete inventory', async () => 
  assert.equal(result.status,'partial'); assert.equal(result.total,1000); assert.match(result.reason,/limit/);
  assert.equal((await loadUserInventory(clientFor([pages[0],new Error('denied')]).client,'fixture',now)).status,'partial');
 });
+test('rejects oversized inventory pages without counting their contents',async()=>{
+ const page=Array.from({length:50},(_,i)=>user(String(i),null));
+ const oversized=Array.from({length:51},(_,i)=>user(`extra-${i}`,null));
+ const first=await loadUserInventory(clientFor([oversized]).client,'fixture',now);
+ assert.equal(first.status,'error'); assert.equal(first.total,0);
+ const later=await loadUserInventory(clientFor([page,oversized]).client,'fixture',now);
+ assert.equal(later.status,'partial'); assert.equal(later.total,50); assert.match(later.reason,/Invalid inventory page/);
+});

@@ -36,7 +36,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   const recommendation=await evaluate("document.querySelector('[aria-label=\"Recommended action\"]').innerText");
@@ -59,7 +60,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   assert.match(await evaluate("document.querySelector('[aria-label=\"Recommended action\"]').innerText"),/read:network_acls/);
@@ -73,7 +75,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   await waitFor(()=>evaluate("document.body.innerText.includes('8 of 18 failures share the largest known source group')"));
@@ -105,6 +108,16 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   const accountRows=await evaluate("[...document.querySelectorAll('.lens-other-table tbody tr')].map(row=>row.innerText)");
   assert.equal(accountRows.length,4);
   for(let i=1;i<=4;i++) assert.ok(accountRows.some(row=>row.includes(`auth0|mock-${i}`) && row.includes('2 direct') && row.includes('2 wrong password') && row.includes('0 unknown user')));
+  const readsBeforeLead=await evaluate("document.documentElement.dataset.fixtureReads");
+  await evaluate("[...document.querySelectorAll('.lens-source-result tr')].find(row=>row.innerText.includes('auth0|mock-1')).querySelector('button').click()");
+  await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Incoming account lead\"]')"));
+  await evaluate("[...document.querySelectorAll('[aria-label=\"Incoming account lead\"] button')].find(b=>b.textContent==='Use lead in a new form').click()");
+  await waitFor(()=>evaluate("document.querySelector('#account-investigation-target')?.value==='auth0|mock-1'"));
+  assert.equal(await evaluate("document.documentElement.dataset.fixtureReads"),readsBeforeLead);
+  assert.match(await evaluate("document.body.innerText"),/direct event link[\s\S]*does not prove who attempted login or grant authorization/);
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Propose investigation').click()");
+  await waitFor(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.offsetParent && b.textContent==='Approve and run checks')"));
+  assert.equal(await evaluate("document.documentElement.dataset.fixtureReads"),readsBeforeLead);
   await evaluate("location.search='?agentmock&manual&ratelimit'");
   await waitFor(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Load tenant events')"));
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Load tenant events').click()");
@@ -112,7 +125,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   const limited=await evaluate("document.querySelector('[aria-label=\"Recommended action\"]').innerText");
@@ -127,7 +141,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   const corrected=await evaluate("document.querySelector('[aria-label=\"Recommended action\"]').innerText");
@@ -140,7 +155,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   const recovered=await evaluate("document.querySelector('[aria-label=\"Recommended action\"]').innerText");
@@ -153,7 +169,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   await waitFor(()=>evaluate("[...document.querySelectorAll('.react-flow__node')].some(node=>node.innerText.includes('Account pattern follow-up'))"));
@@ -169,6 +186,7 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   assert.equal(await evaluate('document.documentElement.dataset.exhaustedBeforeConclusion'),'true');
@@ -180,7 +198,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   assert.equal(await evaluate('document.documentElement.dataset.historyBeforeModel'),'true');
@@ -193,7 +212,8 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),true);
+  assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
+  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));
   const blockedAction=await evaluate("document.querySelector('[aria-label=\"Recommended action\"]').innerText");
@@ -206,7 +226,6 @@ test('source permissions and eight-of-18 account repetition are visible in the i
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
   await waitFor(()=>evaluate("!!document.querySelector('.lens-agent-consent input')"));
-  await evaluate("document.querySelector('.lens-agent-consent input').click()");
   assert.equal(await evaluate("document.querySelector('.lens-agent-consent input').checked"),false);
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Run all available checks')).click()");
   await waitFor(()=>evaluate("!!document.querySelector('[aria-label=\"Recommended action\"]')"));

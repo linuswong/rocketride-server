@@ -39,6 +39,7 @@ with this node installed and the test tenant configuration is required.
    report that check as blocked. Test `read:logs` separately if necessary.
    Other read operations require their own scopes; do not infer the minimum
    user-log scope from a token that has both permissions.
+8. From `apps/auth0-operations-ui`, run `node --experimental-strip-types test/live-submitted-email-check.mjs` only with `LOGINLENS_LIVE_CONFIRM=AUTHORIZED_DEVELOPMENT_TENANT_READ_ONLY`, `LOGINLENS_TEST_EMAIL` set to the designated test email, `LOGINLENS_INCIDENT_TIME` set to a past ISO timestamp including timezone, and `ROCKETRIDE_URI` / `ROCKETRIDE_APIKEY` configured securely. The script creates and verifies a fresh Auth0-only read-only task, calls the submitted-email tenant-log search and the blocks-by-email tool, prints pass/fail categories only, and terminates the task. It makes no model or write calls. It confirms only that the calls returned valid envelopes, not that a failure or block exists, that all events were indexed, or that the reported email identifies the actor. Never put secrets in committed files or command history. The new tools require the updated node; use `read:logs` and `read:users` respectively. Do not generate login attempts for this test.
 
 ## Live write: unavailable
 

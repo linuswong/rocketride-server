@@ -35,10 +35,10 @@ function StepStatus({ step }: { step: Step }) {
 	return <span className={'step-status ' + state}><span aria-hidden="true">{icons[state]}</span>{labels[state]}</span>;
 }
 
-export function Inspector({step, result}:{step:Step; result?:Investigation}) {
+export function Inspector({step, result, pageNumber}:{step:Step; result?:Investigation; pageNumber?:number}) {
  const [tab,setTab] = useState<InspectorTab>('Findings');
  const view = stepView(step), evidence = step.evidence;
- const matching = result ? findings(result).filter(item=>item.source===step.id) : [];
+ const matching = result ? findings(result).filter(item=>item.source===step.id && (pageNumber === undefined || item.page === undefined || item.page === pageNumber)) : [];
  return <div className="step-inspector"><div className="step-inspector-title"><h3>{step.label}</h3><StepStatus step={step}/></div><p>{step.purpose}</p>
  <div className="inspector-tabs" role="group" aria-label="Evidence views">{(['Findings','Input','Output','Trace'] as const).map(name=><button type="button" key={name} aria-pressed={tab===name} onClick={()=>setTab(name)}>{name}</button>)}</div>
  {tab==='Findings' && <><h4>Observation</h4><p>{step.summary}</p>{matching.map((item,i)=><p key={i}><strong>{item.category}</strong> · {item.text} <small>Source: {step.label}</small></p>)}{!matching.length && <p className="hint">No additional validated finding for this step.</p>}{view.severity==='warning' && <p>Review this result and obtain independent evidence before taking action.</p>}</>}
