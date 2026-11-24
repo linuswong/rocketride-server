@@ -53,7 +53,7 @@ test('offline investigation browser flow, errors, keyboard and responsive layout
   await waitFor(()=>evaluate("!!document.querySelector('.lens-atlas canvas')"));
   await waitFor(()=>evaluate("document.querySelector('.maplibregl-ctrl-attrib') !== null"));
   const clickMap = async (lon,lat) => {
-   const pos = await evaluate(`(() => { const r=document.querySelector('.lens-atlas canvas').getBoundingClientRect(); const scale=512*2**0.8; const merc=y=>Math.log(Math.tan(Math.PI/4+y*Math.PI/360)); return {x:r.left+r.width/2+${lon}/360*scale,y:r.top+r.height/2-(merc(${lat})-merc(15))/(2*Math.PI)*scale}; })()`);
+   const pos = await evaluate(`(() => { document.querySelector('.lens-atlas').scrollIntoView({block:'center'}); const r=document.querySelector('.lens-atlas canvas').getBoundingClientRect(); const scale=512*2**0.8; const merc=y=>Math.log(Math.tan(Math.PI/4+y*Math.PI/360)); return {x:r.left+r.width/2+${lon}/360*scale,y:r.top+r.height/2-(merc(${lat})-merc(15))/(2*Math.PI)*scale}; })()`);
    await send('Input.dispatchMouseEvent',{type:'mousePressed',x:pos.x,y:pos.y,button:'left',clickCount:1});
    await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:pos.x,y:pos.y,button:'left',clickCount:1});
   };
@@ -84,7 +84,7 @@ test('offline investigation browser flow, errors, keyboard and responsive layout
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.offsetParent && b.textContent.includes('Approve and run')).click()");
   await waitFor(()=>evaluate("document.body.innerText.includes('Evidence and next steps')"));
 
-  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Anomaly Detection').click()");
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Alerts').click()");
   await evaluate("document.querySelector('.lens-alert').click()");
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Propose fixture')).click()");
   await waitFor(()=>evaluate("document.querySelectorAll('.lens-graph .react-flow__node').length>=2"));
@@ -93,8 +93,8 @@ test('offline investigation browser flow, errors, keyboard and responsive layout
   await evaluate("document.querySelector('.lens-graph .react-flow__node').click()");
   await evaluate("document.querySelector('.lens-inspector details summary').click()");
   assert.match(await evaluate("document.querySelector('.lens-inspector pre').innerText"),/reference/);
-  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Settings').click()");
-  assert.match(await evaluate("document.body.innerText"),/Settings[\s\S]*RocketRide engine/);
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Integrations').click()");
+  assert.match(await evaluate("document.body.innerText"),/Integrations[\s\S]*RocketRide engine/);
   await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Investigations').click()");
   assert.match(await evaluate("document.querySelector('.lens-work h3').innerText"),/Completed/);
   await evaluate("location.search='?lensmock'");
@@ -103,7 +103,7 @@ test('offline investigation browser flow, errors, keyboard and responsive layout
   await waitFor(()=>evaluate("document.body.innerText.includes('Tenant snapshot')"));
   assert.match(await evaluate("document.querySelector('.lens-summary-note').innerText"),/tenant user inventory is not loaded/);
   assert.doesNotMatch(await evaluate("document.querySelector('.lens-user-summary').innerText"),/Synthetic demo inventory/);
-  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Anomaly Detection').click()");
+  await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Alerts').click()");
   await evaluate("document.querySelector('.lens-alert').click()");
   assert.match(await evaluate("document.body.innerText"),/TENANT SNAPSHOT/);
   await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Overview').click()");

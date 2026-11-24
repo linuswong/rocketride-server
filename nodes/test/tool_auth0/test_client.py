@@ -6,6 +6,7 @@
 
 import sys
 import types
+from threading import Barrier
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 
@@ -111,6 +112,82 @@ def test_expiry_and_401_refresh(client, monkeypatch):
     assert error.value.code == 'AUTHENTICATION_FAILED'
 
 
+def test_scope_change_refreshes_once_and_bounds_retries(client, monkeypatch):
+    module, auth, requests, _ = client
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    missing = response(403, {'error': 'insufficient_scope'})
+    requests.request.side_effect = [missing, response(200, {'ok': True})]
+    assert auth.request('get_user', identifier='1') == {'ok': True}
+    assert requests.post.call_count == 2
+    assert requests.request.call_count == 2
+
+    requests.request.side_effect = None
+    requests.request.return_value = missing
+    for _ in range(5):
+        with pytest.raises(module.Auth0Error) as error:
+            auth.request('get_user', identifier='1')
+        assert error.value.code == 'MISSING_SCOPE'
+    assert requests.post.call_count == 2
+    assert requests.request.call_count == 7
+
+    clock[0] += 31
+    requests.request.side_effect = [missing, response(200, {'ok': True})]
+    assert auth.request('get_user', identifier='1') == {'ok': True}
+    assert requests.post.call_count == 3
+
+
+def test_scope_error_never_replays_write(client):
+    module, auth, requests, _ = client
+    requests.request.return_value = response(403, {'error': 'insufficient_scope'})
+    with pytest.raises(module.Auth0Error) as error:
+        auth.request('unblock_user', identifier='1')
+    assert error.value.code == 'MISSING_SCOPE'
+    assert requests.request.call_count == 1
+
+
+def test_concurrent_missing_scope_reads_share_bounded_refresh(client, monkeypatch):
+    module, auth, requests, _ = client
+    monkeypatch.setattr(module.time, 'monotonic', lambda: 100.0)
+    requests.request.return_value = response(403, {'error': 'insufficient_scope'})
+
+    def read(_):
+        try:
+            auth.request('get_log_event', identifier='event')
+        except module.Auth0Error as error:
+            return error.code
+        raise AssertionError('The fixture must reject every read')
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(read, range(20)))
+    assert results == ['MISSING_SCOPE'] * 20
+    assert requests.post.call_count == 2
+    assert requests.request.call_count == 21
+
+
+def test_concurrent_scope_change_uses_single_refreshed_token(client, monkeypatch):
+    module, auth, requests, _ = client
+    monkeypatch.setattr(module.time, 'monotonic', lambda: 100.0)
+    requests.post.side_effect = [
+        response(body={'access_token': token, 'expires_in': 3600}) for token in ('old-token', 'new-token')
+    ]
+    first_wave = Barrier(8, timeout=5)
+
+    def api_request(_method, _url, **kwargs):
+        if kwargs['headers']['Authorization'] == 'Bearer old-token':
+            first_wave.wait()
+            return response(403, {'error': 'insufficient_scope'})
+        assert kwargs['headers']['Authorization'] == 'Bearer new-token'
+        return response(200, {'ok': True})
+
+    requests.request.side_effect = api_request
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: auth.request('get_log_event', identifier='event'), range(8)))
+    assert results == [{'ok': True}] * 8
+    assert requests.post.call_count == 2
+    assert requests.request.call_count == 16
+
+
 @pytest.mark.parametrize('status', [401, 429, 500])
 def test_writes_never_replayed(client, status):
     module, auth, requests, _ = client
@@ -147,6 +224,16 @@ def test_disabled_writes_and_route_restrictions(client):
         with pytest.raises(module.Auth0Error):
             auth.request(operation, identifier=identifier)
     requests.post.assert_not_called()
+
+
+def test_application_config_route_is_read_only_and_encodes_the_identifier(client):
+    _, auth, requests, _ = client
+    auth.request('get_application_config', identifier='client/one', params={'fields': 'client_id,app_type'})
+    args, kwargs = requests.request.call_args
+    assert args[0] == 'GET'
+    assert args[1].endswith('/api/v2/clients/client%2Fone')
+    assert kwargs['params'] == {'fields': 'client_id,app_type'}
+    assert kwargs['allow_redirects'] is False
 
 
 def test_write_connection_failure_is_not_replayed(client):
@@ -258,6 +345,7 @@ def test_transport_errors_are_sanitized_and_not_replayed(client, operation):
         'get_user',
         'get_user_logs',
         'get_log_event',
+        'compare_network_acl_ranges',
         'get_user_blocks',
         'get_connection',
         'get_connection_clients',
@@ -299,6 +387,7 @@ def test_all_tools_map_remote_errors_through_flat_contract(client, node, operati
     ):
         key = {
             'get_log_event': 'log_id',
+            'compare_network_acl_ranges': 'log_id',
             'get_connection': 'connection_id',
             'get_connection_clients': 'connection_id',
             'get_organization_members': 'organization_id',
@@ -315,6 +404,7 @@ def test_all_tools_map_remote_errors_through_flat_contract(client, node, operati
         in (
             'search_users',
             'get_log_event',
+            'compare_network_acl_ranges',
             'get_connection',
             'get_connection_clients',
             'list_connections',

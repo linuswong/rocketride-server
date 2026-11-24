@@ -8,14 +8,16 @@ This experimental node attaches to an agent as a read-only Auth0 tool. It search
 
 ## As a tool
 
-Attach this node to an agent to expose these nineteen read-only tools. Results are flat objects with `success`; failures also include `error`, `error_code`, `retryable`, and `retry_after_seconds`. The November 4 contract instead specifies nested `data` and `error` envelopes; this node retains the existing flat envelope.
+Attach this node to an agent to expose these twenty-one read-only tools. Results are flat objects with `success`; failures also include `error`, `error_code`, `retryable`, and `retry_after_seconds`. The November 4 contract instead specifies nested `data` and `error` envelopes; this node retains the existing flat envelope.
 
 | Tool | Input | Result and permission |
 | --- | --- | --- |
 | `search_users` | `email`, optional `limit` (1–20, default 10) | Exact email matches: `users`, `count`; `read:users`. |
 | `get_user` | `user_id` | Sign-in profile, connections and administrative `blocked` state; `read:users`. |
-| `get_user_logs` | `user_id`, optional `limit` (1–50, default 10) | One newest-first page of sanitized `events` and `count`; `read:logs_users` was sufficient in a development-tenant test. |
-| `get_log_event` | `log_id` | Filtered event fields and allowlisted `diagnostics`; `read:logs`. |
+| `get_user_logs` | `user_id`, optional `limit` (1–50, default 10), optional `page` (0–4, default 0) | One newest-first page of sanitized `events` and `count`; `read:logs_users` was sufficient in a development-tenant test. |
+| `get_log_event` | `log_id`, optional `analytics`, `include_source`, `include_identity_hint`, `include_fingerprint`, `include_application`, `compare_source` | Filtered event fields and diagnostics; `read:logs`. `include_source` adds the event IP, `include_identity_hint` adds the submitted username, `include_fingerprint` adds validated JA3 and JA4 fingerprints, `include_application` adds the event's client ID, and `compare_source` compares the IP with each attack-protection allowlist and requires `read:attack_protection`. |
+| `get_application_config` | `client_id` | Selected nonsecret application type, token endpoint authentication method and grant-type flags; `read:clients`. |
+| `compare_network_acl_ranges` | `log_id` | Event IP and count of active authentication or tenant ACLs whose positive IP ranges contain it; `read:logs`, `read:network_acls`. |
 | `get_user_blocks` | `user_id` | Brute-force `has_blocks`, `block_count` and `blocks`; `read:users`. |
 | `get_connection` | `connection_id` (1–128 characters) | Connection `id`, `name`, and `strategy`; `read:connections`. |
 | `list_connections` | optional `page` (0–99, default 0), `limit` (1–50, default 20) | One page of filtered `connections` and `count`; `(page + 1) * limit` must not exceed 1,000; `read:connections`. |
@@ -35,6 +37,8 @@ Attach this node to an agent to expose these nineteen read-only tools. Results a
 `user_id` and `log_id` must be nonempty strings of at most 300 characters; `connection_id` is limited to 128 characters. Identifiers consisting only of whitespace, `.` or `..` are rejected. `email` is required, must be at most 254 characters, and accepts unquoted ASCII addresses. Limits and page numbers must be integers; booleans and out-of-range values are rejected. A successful search with no matches returns an empty list and count zero.
 
 Search entries contain `user_id`, `email`, `name`, and `email_verified`. Profile names and email addresses are bounded and control characters are removed. `get_user` additionally returns `blocked`, `last_login`, `logins_count`, and `connections`; missing optional profile values are null, and an absent `blocked` is false. Each user log contains `log_id`, `date`, `type`, sanitized `description`, `connection`, and `client_name`. `get_log_event` adds `user_id` and `diagnostics`. Each block contains a redacted `identifier` and a `connection`.
+
+User-log pagination uses zero-based offset pages, each capped at the requested limit. A short page does not establish Auth0 retention or indexing completeness; concurrent log ingestion can shift offset pages. The caller must deduplicate results and report gaps.
 
 Connection names are preserved and are untrusted data. Connection metadata selects only `id`, `name`, and `strategy`; options, provider credentials, and signing keys are excluded. Missing fields are null. Auth0 is retiring `enabled_clients` from connection reads, so the field has been removed from these tool outputs despite the November 4 contract. Use `get_connection_clients` for a single page from the dedicated endpoint. Omit `cursor` on the first call; pass `next_cursor` as `cursor` for the next page when it is non-null. The tool never fetches subsequent pages automatically, and `count` is the returned page size.
 
@@ -76,13 +80,27 @@ Store client secrets in RocketRide's secure environment settings and use referen
 
 ## Authentication
 
-Authorize a read-only machine-to-machine application for the Auth0 Management API with `read:users`, `read:logs_users`, `read:logs`, `read:connections`, `read:clients`, `read:attack_protection`, `read:roles`, `read:organizations`, and `read:organization_members` as needed for the tools above. In a development tenant, `get_user_logs` succeeded with `read:logs_users` as the only permission selected for a separate application. That application also unexpectedly succeeded at `search_logs`; the reason has not been established, and token claims were not independently inspected. Write credentials are reserved for a future authorized recovery flow and are not needed for the available tools. The node obtains client-credentials tokens for the Management API audience and caches read and write tokens independently.
+Authorize a read-only machine-to-machine application for the Auth0 Management API with `read:users`, `read:logs_users`, `read:logs`, `read:connections`, `read:clients`, `read:attack_protection`, `read:network_acls`, `read:roles`, `read:organizations`, and `read:organization_members` as needed for the tools above. In a development tenant, `get_user_logs` succeeded with `read:logs_users` as the only permission selected for a separate application. That application also unexpectedly succeeded at `search_logs`; the reason has not been established, and token claims were not independently inspected. Write credentials are reserved for a future authorized recovery flow and are not needed for the available tools. The node obtains client-credentials tokens for the Management API audience and caches read and write tokens independently. If Auth0 explicitly returns `insufficient_scope` on a read, the node may refresh the read token and retry that read once; refreshes are limited to one every 30 seconds per client. It never replays a write for this reason. A still-missing permission remains a `MISSING_SCOPE` error.
 
 ## Notes
 
 `search_authentication_history` queries a fixed date range using Auth0's log search. It deduplicates IDs across pages and uses grouping keys scoped to the entire response. `coverage: retrieved` means the query reached a short page, not that Auth0 retained or indexed every event in the interval. `coverage: partial` indicates the five-page limit, duplicate or malformed records, or a later request failure. `reason`, `rejected`, `duplicates`, `pages` and `retry_after_seconds` describe that outcome. A failure on the first page is returned as a normal tool error. Offset pagination and concurrent ingestion can cause gaps. Users should check the tenant's retention and independently verify important results.
 
 For LoginLens, `search_logs` accepts optional `analytics: true`. This view omits user IDs and returns integer `account_group` and `source_group` keys where available. Keys are comparable only within the returned page. Valid Auth0 network-origin coordinates from `location_info` are rounded to whole degrees. Missing coordinates are omitted. The response never includes raw IP addresses. `get_log_event` also accepts `analytics: true` to omit the user ID when inspecting a cited event. Default responses are unchanged.
+
+With `compare_source: true`, `get_log_event` retrieves the event IP and both Auth0 attack-protection allowlists, checks IPv4 or IPv6 address and CIDR membership, and returns the IP plus two match flags. It does not return the allowlists. Missing IPs produce null flags; malformed or unavailable lists fail the check. A match identifies an Auth0 trusted-list entry, not proof of corporate ownership; a nonmatch does not rule out corporate infrastructure. This operation does not resolve ASNs or call a third-party enrichment service.
+
+`compare_network_acl_ranges` reads one page of up to 100 [tenant ACL rules](https://auth0.com/docs/api/management/v2/network-acls/get-network-acls) and reports how many active authentication or tenant rules have positive IP ranges containing the event's validated IP. It returns the event IP but not the ranges or rule details. `partial` means more rules exist; a missing IP produces `source_unavailable`. A matching range does not establish that the full rule matched or was enforced: other conditions, exclusions, priorities and actions are not evaluated. It does not prove corporate ownership or resolve an ASN. Tenant ACL availability depends on the Auth0 plan. This tool has not been verified against a live tenant.
+
+With `include_source: true`, `get_log_event` returns the validated source IP without requesting protection settings. The default response includes the event's user ID when present; `analytics: true` suppresses that identity. The additional source field is intended for authorized investigations, and is null if Auth0 omits or supplies an invalid IP.
+
+`include_identity_hint: true` adds the bounded, filtered `user_name` from the event if available; this option cannot be combined with `analytics: true`. A submitted username can identify a target but does not prove who initiated the attempt or that the username uniquely identifies an account. Defaults do not expose the field.
+
+`include_fingerprint: true` adds validated JA3 and JA4 values from `security_context`, each null when absent or malformed. It cannot be combined with `analytics: true` and is omitted by default. A shared fingerprint can represent common client software and does not establish a common actor, corporate ownership, or malicious intent.
+
+`include_application: true` adds the event's validated Auth0 client ID, or null when absent or malformed. It cannot be combined with `analytics: true` and is omitted by default. The event's client ID does not identify the credentials configured for the RocketRide connection.
+
+`get_application_config` requests only the client ID, application type, grant types and token endpoint authentication method. It returns allowlisted categories and boolean grant flags, with null for missing or unrecognized values. It does not request or return a client secret. These settings alone do not establish that an application's credentials are stale or that a configuration caused a failure.
 
 ### Helpdesk example
 
@@ -100,7 +118,7 @@ For authentication errors, check the tenant hostname, application credentials, M
 
 ### Security and limitations
 
-The tools return only selected profile, event, connection, application, and protection fields; raw metadata, connection options, log descriptions, IP addresses, locations, and tokens are not intentionally returned. Diagnostic explanations are fixed text selected by event type. All eighteen tools listed above are exposed. The original thirteen read-only tools, including connection-client continuation pagination, have been exercised against a development tenant; the five roles, permissions, and organizations tools have not been live-tested. Write operations are unavailable and have not been live tested.
+The tools return selected profile, event, connection, application, and protection fields; raw metadata, connection options, log descriptions and tokens are not intentionally returned. Event source IPs are returned only by the explicitly requested source-comparison options and ACL comparison tool described above; analytics history can include coarse coordinates. Diagnostic explanations are fixed text selected by event type. All twenty tools listed above are exposed. The original thirteen read-only tools, including connection-client continuation pagination, have been exercised against a development tenant; the role, permission, organization and ACL additions have not been live-tested. Write operations are unavailable and have not been live tested.
 
 ## Upstream docs
 

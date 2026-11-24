@@ -1,0 +1,121 @@
+/* LoginLens design tokens. The shell `--rr-*` variables are remapped so that
+   shared components and the shell chrome render in the LoginLens palette
+   while LoginLens is mounted. The shell writes its theme inline on <html>, so
+   the remap is declared on <body>, where it overrides by inheritance. */
+body:has(.lens-root),
+.lens-root {
+	--ll-accent: #3da54e;
+	--ll-accent-strong: #52c264;
+	--ll-accent-soft: rgba(61, 165, 78, 0.14);
+	--ll-accent-line: rgba(61, 165, 78, 0.42);
+	--ll-accent-ink: #06140a;
+
+	--ll-bg: #0b0d0c;
+	--ll-surface: #1b1b1b;
+	--ll-surface-2: #222423;
+	--ll-surface-3: #2b2e2c;
+	--ll-glass: rgba(27, 27, 27, 0.72);
+
+	--ll-text: #ffffff;
+	--ll-muted: #9aa19c;
+	--ll-subtle: #737a75;
+
+	--ll-border: rgba(255, 255, 255, 0.08);
+	--ll-border-strong: rgba(255, 255, 255, 0.14);
+	--ll-border-hover: rgba(255, 255, 255, 0.24);
+
+	--ll-danger: #f06a5f;
+	--ll-danger-soft: rgba(240, 106, 95, 0.14);
+	--ll-warning: #e8b04b;
+	--ll-warning-soft: rgba(232, 176, 75, 0.14);
+
+	--ll-font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+	--ll-mono: ui-monospace, 'SF Mono', SFMono-Regular, Consolas, monospace;
+
+	--ll-text-xs: 11px;
+	--ll-text-sm: 12px;
+	--ll-text-md: 14px;
+	--ll-text-lg: 16px;
+	--ll-text-xl: 20px;
+	--ll-text-2xl: 28px;
+	--ll-text-display: clamp(30px, 3.6vw, 48px);
+
+	--ll-space-1: 4px;
+	--ll-space-2: 8px;
+	--ll-space-3: 12px;
+	--ll-space-4: 16px;
+	--ll-space-5: 20px;
+	--ll-space-6: 24px;
+	--ll-space-8: 32px;
+	--ll-space-10: 40px;
+
+	--ll-radius-sm: 10px;
+	--ll-radius: 14px;
+	--ll-radius-lg: 20px;
+	--ll-radius-pill: 999px;
+
+	--ll-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.28);
+	--ll-glow: radial-gradient(60% 55% at 12% 0%, rgba(61, 165, 78, 0.22), transparent 70%),
+		radial-gradient(40% 40% at 88% 10%, rgba(61, 165, 78, 0.1), transparent 70%);
+	--ll-duration: 160ms;
+	--ll-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+	--rr-bg-default: var(--ll-bg);
+	--rr-bg-primary: var(--ll-bg);
+	--rr-bg-paper: var(--ll-surface);
+	--rr-bg-secondary: var(--ll-surface);
+	--rr-bg-surface-alt: var(--ll-surface-2);
+	--rr-bg-input: var(--ll-surface-2);
+	--rr-text-primary: var(--ll-text);
+	--rr-text-secondary: var(--ll-muted);
+	--rr-text-disabled: var(--ll-subtle);
+	--rr-border: var(--ll-border-strong);
+	--rr-border-color: var(--ll-border);
+	--rr-border-hover: var(--ll-border-hover);
+	--rr-brand: var(--ll-accent);
+	--rr-brand-contrast: var(--ll-accent-ink);
+	--rr-color-success: var(--ll-accent);
+	--rr-color-error: var(--ll-danger);
+	--rr-color-warning: var(--ll-warning);
+	--rr-font-family: var(--ll-font);
+
+	--rr-palette-mode: dark;
+	--rr-bg-surface: var(--ll-surface);
+	--rr-accent: var(--ll-accent);
+	--rr-accent-faded: var(--ll-accent-line);
+	--rr-bg-button: var(--ll-accent);
+	--rr-fg-button: var(--ll-accent-ink);
+	--rr-text-link: var(--ll-accent-strong);
+	--rr-text-caption: var(--ll-subtle);
+	--rr-color-error-light: var(--ll-danger);
+	--rr-border-focus: var(--ll-accent);
+	--rr-border-input: var(--ll-border-strong);
+	--rr-sash-hover: var(--ll-accent);
+	--rr-icon-color: var(--ll-text);
+	--rr-bg-widget: var(--ll-surface);
+	--rr-fg-widget: var(--ll-text);
+	--rr-bg-widget-header: var(--ll-surface-2);
+	--rr-bg-widget-hover: rgba(255, 255, 255, 0.05);
+	--rr-bg-toolbar-hover: rgba(255, 255, 255, 0.08);
+	--rr-shadow-widget: rgba(0, 0, 0, 0.5);
+	--rr-doctabs-bg: var(--ll-bg);
+	--rr-doctabs-tab-active-bg: var(--ll-surface);
+	--rr-doctabs-tab-hover-bg: rgba(255, 255, 255, 0.05);
+	--rr-doctabs-fg-active: var(--ll-text);
+	--rr-doctabs-fg-inactive: var(--ll-muted);
+	--rr-doctabs-border: var(--ll-border);
+	--rr-bg-rail: var(--ll-bg);
+	--rr-bg-rail-hover: rgba(255, 255, 255, 0.08);
+	--rr-bg-rail-plate: var(--ll-surface-2);
+	--rr-fg-rail: var(--ll-muted);
+	--rr-fg-rail-active: var(--ll-text);
+	--rr-bg-list-hover: rgba(255, 255, 255, 0.05);
+	--rr-bg-list-active: var(--ll-accent-soft);
+	--rr-fg-list-active: var(--ll-text);
+	--rr-bg-scrollbar-thumb: rgba(255, 255, 255, 0.16);
+	--rr-grey-200: #2b2e2c;
+	--rr-grey-400: #737a75;
+	--rr-grey-500: #9aa19c;
+
+	color-scheme: dark;
+}

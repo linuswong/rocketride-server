@@ -32,9 +32,9 @@ const listKeys: Record<string, string> = {
  list_organizations: 'organizations', get_organization_members: 'members',
 };
 const noArgs = new Set(['list_users', 'list_roles', 'list_applications', 'list_connections', 'list_organizations', 'get_brute_force_settings', 'get_ip_throttling_settings']);
-const idArgs: Record<string, string> = { get_user: 'user_id', get_user_logs: 'user_id', get_user_blocks: 'user_id', get_user_roles: 'user_id', get_user_permissions: 'user_id', get_log_event: 'log_id', get_connection: 'connection_id', get_connection_clients: 'connection_id', get_organization_members: 'organization_id' };
+const idArgs: Record<string, string> = { get_user: 'user_id', get_user_logs: 'user_id', get_user_blocks: 'user_id', get_user_roles: 'user_id', get_user_permissions: 'user_id', get_log_event: 'log_id', get_application_config: 'client_id', compare_network_acl_ranges: 'log_id', get_connection: 'connection_id', get_connection_clients: 'connection_id', get_organization_members: 'organization_id' };
 const allowedTools = new Set([...Object.keys(listKeys), ...noArgs, ...Object.keys(idArgs), 'get_user_blocks', 'get_user', 'search_logs']);
-export interface Evidence { tool: string; status: 'success' | 'error'; input?: Record<string, unknown>; data?: Record<string, unknown>; error?: string; }
+export interface Evidence { tool: string; status: 'success' | 'error'; input?: Record<string, unknown>; data?: Record<string, unknown>; error?: string; retryable?:boolean; retryAfterSeconds?:number; }
 export interface ToolClient { tool(options: { token: string; tool: string; nodeId: string; input: Record<string, unknown> }): Promise<unknown>; }
 export interface LookupPlan { email?: string; tool?: string; input?: Record<string, unknown>; error?: string; }
 
@@ -76,7 +76,13 @@ function validateResult(tool: string, value: unknown): Record<string, unknown> {
  if (tool === 'search_authentication_history' && (!['retrieved','partial'].includes(String(r.coverage)) || !Number.isInteger(r.pages) || (r.pages as number)<1 || (r.pages as number)>5 || !Number.isInteger(r.rejected) || (r.rejected as number) < 0 || !Number.isInteger(r.duplicates) || (r.duplicates as number) < 0 || !(r.reason === null || (typeof r.reason === 'string' && /^[A-Z_]{1,40}$/.test(r.reason))) || !(r.retry_after_seconds === null || (typeof r.retry_after_seconds === 'number' && Number.isFinite(r.retry_after_seconds) && r.retry_after_seconds >= 0)))) throw new Error('Malformed history coverage.');
  if (tool === 'get_user' && (typeof r.user_id !== 'string' || typeof r.blocked !== 'boolean' || !Array.isArray(r.connections))) throw new Error('Malformed user profile.');
  if (tool === 'get_user_blocks' && (typeof r.has_blocks !== 'boolean' || !Array.isArray(r.blocks) || !Number.isInteger(r.block_count) || r.block_count !== r.blocks.length || r.has_blocks !== (r.blocks.length > 0))) throw new Error('Malformed block response.');
+ if (tool === 'get_application_config') {
+  const fields=['authorization_code_enabled','password_enabled','refresh_token_enabled','client_credentials_enabled'];
+  const allowed=new Set(['success','client_id','app_type','token_endpoint_auth_method',...fields]);
+  if (Object.keys(r).some(key=>!allowed.has(key)) || typeof r.client_id!=='string' || ![null,'native','spa','regular_web','non_interactive'].includes(r.app_type as string | null) || ![null,'none','client_secret_basic','client_secret_post','private_key_jwt'].includes(r.token_endpoint_auth_method as string | null) || fields.some(key=>r[key]!==null && typeof r[key]!=='boolean')) throw new Error('Malformed application configuration.');
+ }
  if ((tool === 'get_brute_force_settings' || tool === 'get_ip_throttling_settings') && typeof r.enabled !== 'boolean') throw new Error('Malformed security settings.');
+ if (tool === 'compare_network_acl_ranges' && (!Number.isInteger(r.active_rules_checked) || (r.active_rules_checked as number)<0 || !['retrieved','partial','source_unavailable'].includes(String(r.coverage)) || !(r.source_ip === null || typeof r.source_ip === 'string') || !(r.ip_range_matches === null || (Number.isInteger(r.ip_range_matches) && (r.ip_range_matches as number)>=0 && (r.ip_range_matches as number)<=(r.active_rules_checked as number))) || (r.coverage === 'source_unavailable') !== (r.ip_range_matches === null) || (r.coverage === 'source_unavailable') !== (r.source_ip === null))) throw new Error('Malformed network ACL comparison.');
  return r;
 }
 
@@ -87,9 +93,10 @@ export async function invokeRead(client: ToolClient, token: string, tool: string
   const response = await Promise.race([client.tool({ token, tool, nodeId: 'tool_auth0_1', input }), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs); })]);
   if (response && typeof response === 'object' && (response as Record<string, unknown>).success === false) {
    const r = response as Record<string, unknown>;
-   const retry = typeof r.retry_after_seconds === 'number' ? ` Retry after ${r.retry_after_seconds} seconds.` : '';
-   const code = typeof r.error_code === 'string' && /^[A-Z_]{1,40}$/.test(r.error_code) ? r.error_code : 'Tool request failed.';
-   return { tool, input, status: 'error', error: `${code}${retry}` };
+   const retryAfterSeconds = typeof r.retry_after_seconds === 'number' && Number.isFinite(r.retry_after_seconds) && r.retry_after_seconds >= 0 ? r.retry_after_seconds : undefined;
+   const retry = retryAfterSeconds !== undefined ? ` Retry after ${retryAfterSeconds} seconds.` : '';
+   const code = typeof r.error_code === 'string' && /^[A-Z][A-Z0-9_]{0,39}$/.test(r.error_code) ? r.error_code : 'Tool request failed.';
+   return { tool, input, status: 'error', error: `${code}${retry}`, ...(typeof r.retryable === 'boolean' ? {retryable:r.retryable} : {}), ...(retryAfterSeconds !== undefined ? {retryAfterSeconds} : {}) };
   }
   const data = validateResult(tool, response);
   return { tool, input, status: 'success', data };

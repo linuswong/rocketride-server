@@ -66,12 +66,14 @@ def dispatched_tool(tool, monkeypatch):
         'get_user',
         'get_user_logs',
         'get_log_event',
+        'compare_network_acl_ranges',
         'get_user_blocks',
         'get_connection',
         'get_connection_clients',
         'list_connections',
         'list_users',
         'list_applications',
+        'get_application_config',
         'search_logs',
         'search_authentication_history',
         'get_brute_force_settings',
@@ -124,6 +126,7 @@ def test_dispatch_accepts_model_input(dispatched_tool):
         ('list_connections', {}),
         ('list_users', {}),
         ('list_applications', {}),
+        ('get_application_config', {'client_id': 'id'}),
         ('search_logs', {}),
         ('get_brute_force_settings', {}),
         ('get_ip_throttling_settings', {}),
@@ -149,12 +152,14 @@ def test_registered_schemas(tool):
         'get_user',
         'get_user_logs',
         'get_log_event',
+        'compare_network_acl_ranges',
         'get_user_blocks',
         'get_connection',
         'get_connection_clients',
         'list_connections',
         'list_users',
         'list_applications',
+        'get_application_config',
         'search_logs',
         'search_authentication_history',
         'get_brute_force_settings',
@@ -171,6 +176,201 @@ def test_registered_schemas(tool):
         meta = getattr(instance, name).__tool_meta__
         assert 'required' in meta['input_schema'] and meta['output_schema']['properties']['success']
         assert meta['description']
+
+
+def test_event_source_comparison_checks_both_auth0_allowlists(tool):
+    instance, client, _ = tool
+    client.request.side_effect = lambda method, **kwargs: {
+        'get_log_event': {'log_id': 'event-1', 'date': '2026-01-01T00:00:00Z', 'type': 'f', 'ip': '192.0.2.10'},
+        'get_brute_force_settings': {'allowlist': ['192.0.2.0/24']},
+        'get_ip_throttling_settings': {'allowlist': ['2001:db8::/32']},
+    }[method]
+    result = instance.get_log_event({'log_id': 'event-1', 'analytics': True, 'compare_source': True})
+    assert result['source_ip'] == '192.0.2.10'
+    assert result['brute_force_allowlisted'] is True
+    assert result['ip_throttling_allowlisted'] is False
+    assert 'user_id' not in result
+    assert 'allowlist' not in result
+
+
+def test_network_acl_range_comparison_never_claims_an_applied_rule(tool):
+    instance, client, _ = tool
+    client.request.side_effect = lambda method, **kwargs: {
+        'get_log_event': {'log_id': 'e', 'date': '2026-01-01T00:00:00Z', 'type': 'fp', 'ip': '192.0.2.10'},
+        'list_network_acls': {
+            'total': 4,
+            'network_acls': [
+                {
+                    'active': True,
+                    'rule': {
+                        'scope': 'authentication',
+                        'match': {'ipv4_cidrs': ['192.0.2.0/24']},
+                        'not_match': {'user_agents': ['x']},
+                        'action': {'block': True},
+                    },
+                },
+                {'active': True, 'rule': {'scope': 'tenant', 'match': {'ipv6_cidrs': ['2001:db8::/32']}}},
+                {'active': False, 'rule': {'scope': 'authentication', 'match': {'ipv4_cidrs': ['192.0.2.10']}}},
+                {'active': True, 'rule': {'scope': 'management', 'match': {'ipv4_cidrs': ['192.0.2.10']}}},
+            ],
+        },
+    }[method]
+    result = instance.compare_network_acl_ranges({'log_id': 'e'})
+    assert result['ip_range_matches'] == 1
+    assert result['active_rules_checked'] == 2
+    assert result['coverage'] == 'retrieved'
+    assert 'block' not in result and 'allow' not in result and result['source_ip'] == '192.0.2.10'
+    client.request.assert_any_call('list_network_acls', params={'page': 0, 'per_page': 100, 'include_totals': 'true'})
+
+
+def test_network_acl_range_comparison_reports_partial_and_invalid_data(tool):
+    instance, client, _ = tool
+    event = {'log_id': 'e', 'type': 'f', 'ip': '2001:db8::1'}
+    client.request.side_effect = [
+        event,
+        {
+            'total': 101,
+            'network_acls': [{'active': True, 'rule': {'scope': 'tenant', 'match': {'ipv6_cidrs': ['2001:db8::/32']}}}],
+        },
+    ]
+    result = instance.compare_network_acl_ranges({'log_id': 'e'})
+    assert result['ip_range_matches'] == 1 and result['coverage'] == 'partial'
+    client.request.side_effect = [
+        event,
+        {
+            'total': 1,
+            'network_acls': [{'active': True, 'rule': {'scope': 'tenant', 'match': {'ipv6_cidrs': ['invalid']}}}],
+        },
+    ]
+    assert instance.compare_network_acl_ranges({'log_id': 'e'})['error_code'] == 'API_ERROR'
+    client.request.side_effect = [{'log_id': 'e', 'type': 'f'}]
+    result = instance.compare_network_acl_ranges({'log_id': 'e'})
+    assert result['coverage'] == 'source_unavailable' and result['ip_range_matches'] is None
+
+
+def test_event_source_comparison_rejects_malformed_lists(tool):
+    instance, client, _ = tool
+    client.request.side_effect = lambda method, **kwargs: (
+        {'log_id': 'id', 'type': 'f', 'ip': '192.0.2.1'} if method == 'get_log_event' else {'allowlist': ['invalid']}
+    )
+    assert instance.get_log_event({'log_id': 'id', 'compare_source': True})['error_code'] == 'API_ERROR'
+
+
+def test_event_fingerprint_is_explicit_validated_and_not_available_in_analytics(tool):
+    instance, client, _ = tool
+    client.request.return_value = {
+        'log_id': 'e',
+        'type': 'fp',
+        'security_context': {'ja3': 'ABCDEF0123456789ABCDEF0123456789', 'ja4': 'T13D1516H2_8DAAF6152771_B186095E22B6'},
+    }
+    assert 'ja3' not in instance.get_log_event({'log_id': 'e'})
+    assert 'ja4' not in instance.get_log_event({'log_id': 'e'})
+    assert (
+        instance.get_log_event({'log_id': 'e', 'include_fingerprint': True})['ja3']
+        == 'abcdef0123456789abcdef0123456789'
+    )
+    assert (
+        instance.get_log_event({'log_id': 'e', 'include_fingerprint': True})['ja4']
+        == 't13d1516h2_8daaf6152771_b186095e22b6'
+    )
+    assert (
+        instance.get_log_event({'log_id': 'e', 'include_fingerprint': True, 'analytics': True})['error_code']
+        == 'INVALID_INPUT'
+    )
+    assert instance.get_log_event({'log_id': 'e', 'include_fingerprint': 'yes'})['error_code'] == 'INVALID_INPUT'
+    for value in ('bad', 'a' * 31, 'g' * 32, None, {'ja3': 'a' * 32}):
+        client.request.return_value['security_context']['ja3'] = value
+        assert instance.get_log_event({'log_id': 'e', 'include_fingerprint': True})['ja3'] is None
+    for value in (
+        'bad',
+        't13d1516h2_8daaf6152771_b186095e22bg',
+        None,
+        {'value': 't13d1516h2_8daaf6152771_b186095e22b6'},
+    ):
+        client.request.return_value['security_context']['ja4'] = value
+        assert instance.get_log_event({'log_id': 'e', 'include_fingerprint': True})['ja4'] is None
+
+
+def test_application_config_reads_only_allowlisted_nonsecret_fields(tool):
+    instance, client, _ = tool
+    client.request.return_value = {
+        'client_id': 'abc',
+        'app_type': 'regular_web',
+        'grant_types': ['authorization_code', 'http://auth0.com/oauth/grant-type/password-realm'],
+        'token_endpoint_auth_method': 'client_secret_post',
+        'client_secret': 'never-return-this',
+    }
+    result = instance.get_application_config({'client_id': 'abc'})
+    assert result == {
+        'success': True,
+        'client_id': 'abc',
+        'app_type': 'regular_web',
+        'token_endpoint_auth_method': 'client_secret_post',
+        'authorization_code_enabled': True,
+        'password_enabled': True,
+        'refresh_token_enabled': False,
+        'client_credentials_enabled': False,
+    }
+    assert 'never-return-this' not in json.dumps(result)
+    client.request.assert_called_once_with(
+        'get_application_config',
+        identifier='abc',
+        params={'fields': 'client_id,app_type,grant_types,token_endpoint_auth_method', 'include_fields': 'true'},
+    )
+    client.request.return_value = {'client_id': 'different'}
+    assert instance.get_application_config({'client_id': 'abc'})['error_code'] == 'API_ERROR'
+    client.request.return_value = {'client_id': 'abc'}
+    missing = instance.get_application_config({'client_id': 'abc'})
+    assert missing['password_enabled'] is None and missing['app_type'] is None
+    client.request.return_value = {'client_id': 'abc', 'grant_types': ['password', 3]}
+    assert instance.get_application_config({'client_id': 'abc'})['error_code'] == 'API_ERROR'
+
+
+def test_event_application_id_is_explicit_and_excluded_from_analytics(tool):
+    instance, client, _ = tool
+    client.request.return_value = {'log_id': 'e', 'type': 'fp', 'client_id': 'client_123-ABC'}
+    assert 'client_id' not in instance.get_log_event({'log_id': 'e'})
+    assert instance.get_log_event({'log_id': 'e', 'include_application': True})['client_id'] == 'client_123-ABC'
+    assert (
+        instance.get_log_event({'log_id': 'e', 'include_application': True, 'analytics': True})['error_code']
+        == 'INVALID_INPUT'
+    )
+    assert instance.get_log_event({'log_id': 'e', 'include_application': 'yes'})['error_code'] == 'INVALID_INPUT'
+    for value in (None, '', 'bad id', '../client', 'a' * 129, {'client_id': 'client'}):
+        client.request.return_value['client_id'] = value
+        assert instance.get_log_event({'log_id': 'e', 'include_application': True})['client_id'] is None
+
+
+def test_event_source_and_account_identity_are_available_without_protection_settings(tool):
+    instance, client, _ = tool
+    client.request.return_value = {
+        'log_id': 'event-1',
+        'date': '2026-01-01T00:00:00Z',
+        'type': 'fp',
+        'ip': '192.0.2.10',
+        'user_id': 'auth0|person',
+    }
+    result = instance.get_log_event({'log_id': 'event-1', 'include_source': True})
+    assert result['source_ip'] == '192.0.2.10' and result['user_id'] == 'auth0|person'
+    client.request.assert_called_once_with('get_log_event', identifier='event-1')
+    client.request.reset_mock()
+    anonymous = instance.get_log_event({'log_id': 'event-1', 'include_source': True, 'analytics': True})
+    assert 'user_id' not in anonymous and anonymous['source_ip'] == '192.0.2.10'
+    client.request.assert_called_once_with('get_log_event', identifier='event-1')
+
+
+def test_event_identity_hint_is_opt_in_and_not_available_in_analytics_mode(tool):
+    instance, client, _ = tool
+    client.request.return_value = {'log_id': 'event-1', 'type': 'f', 'user_name': 'person@example.com'}
+    assert 'user_name' not in instance.get_log_event({'log_id': 'event-1'})
+    assert (
+        instance.get_log_event({'log_id': 'event-1', 'include_identity_hint': True})['user_name']
+        == 'person@example.com'
+    )
+    client.request.reset_mock()
+    result = instance.get_log_event({'log_id': 'event-1', 'include_identity_hint': True, 'analytics': True})
+    assert result['error_code'] == 'INVALID_INPUT'
+    client.request.assert_not_called()
 
 
 def test_loginlens_planner_adapter_matches_node_input_contracts(tool):
@@ -933,6 +1133,17 @@ def test_logs_are_bounded_and_derived_from_allowlist(tool):
     detail = instance.get_log_event({'log_id': 'l'})
     assert detail['diagnostics'] == 'No specific diagnostic is available for this event type.'
     assert 'secret' not in str(detail) and '1.2.3.4' not in str(detail)
+
+
+def test_user_log_followup_page_is_bounded(tool):
+    instance, client, _ = tool
+    client.request.return_value = []
+    assert instance.get_user_logs({'user_id': 'auth0|test', 'limit': 20, 'page': 2})['success'] is True
+    assert client.request.call_args.kwargs['params'] == {'page': 2, 'per_page': 20, 'sort': 'date:-1'}
+    for page in (-1, 5, True, '1'):
+        client.request.reset_mock()
+        assert instance.get_user_logs({'user_id': 'auth0|test', 'page': page})['error_code'] == 'INVALID_INPUT'
+        client.request.assert_not_called()
 
 
 def test_suspect_fields_are_omitted_from_logs(tool):

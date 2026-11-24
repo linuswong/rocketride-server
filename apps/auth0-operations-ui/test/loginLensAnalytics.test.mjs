@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalize, summarize} from '../src/loginLensAnalytics.ts';
+import {normalize, otherEvents, summarize} from '../src/loginLensAnalytics.ts';
 const now = Date.parse('2026-11-18T12:00:00Z');
 const event = (id,type,date='2026-11-18T11:30:00Z') => ({log_id:id,type,date,client_name:'Example'});
 test('normalizes login events, excludes duplicates and invalid or unrelated events',()=>{
@@ -17,4 +17,9 @@ test('calculates failure rate and UTC buckets only within the requested window',
 });
 test('rejects timestamps without an explicit timezone',()=>{
  assert.equal(normalize([event('1','s','2026-11-18T11:30:00')]).events.length,0);
+});
+test('retains other event types separately from sign-in metrics',()=>{
+ const rows=[event('1','mgmt_api_read'),event('2','seccft'),event('2','seccft'),event('3','s'),event('4','other','bad')];
+ assert.deepEqual(otherEvents(rows).map(e=>e.type),['mgmt_api_read','seccft']);
+ assert.equal(summarize(normalize(rows).events,now,24).success,1);
 });

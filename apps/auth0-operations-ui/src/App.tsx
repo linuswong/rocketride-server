@@ -1,49 +1,27 @@
 import { analysisResponseInstructions, parseAnalysisResponse } from './analysisResponse';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AppLayout, useAuthUser, useShellConnection } from 'shell';
 import { Question, QuestionType } from 'rocketride';
-import pipeline from './investigation.pipe';
 import syntheticPipeline from './synthetic_investigation.pipe';
 import plannerPipeline from './planner.pipe';
 import telemetryPipeline from './auth0_telemetry.pipe';
 import { startTelemetryTask } from './telemetryTask';
 import { interpretAgentOutput, type Evidence } from './operations';
-import { InvestigationWorkspace } from './InvestigationWorkspace';
+// Base styles load first so LoginLens styles take precedence at equal specificity.
+import './styles.css';
+import { AccountInvestigation } from './AccountInvestigation';
 import { withRequestTimeout } from './requestTimeout';
 import { safeFailure } from './diagnostics';
 import { plannerAnswer, PlannerError, supportsBoundedGemini, type DiagnosticUpdate } from './plannerResponse';
 import { LoginLens, type LensPage } from './LoginLens';
-import './styles.css';
-
-const sections: LensPage[] = ['Overview', 'Analytics', 'Anomaly Detection', 'Investigations', 'Settings'];
+import { LensSidebar } from './lens/LensSidebar';
 
 function AppContents() {
  const { client, isConnected } = useShellConnection();
  const [section, setSection] = useState<LensPage>('Overview');
+ const [alertCount, setAlertCount] = useState<number | null>(null);
  const [busy, setBusy] = useState(false);
- const [reusedTask, setReusedTask] = useState(false);
- const task = useRef<string | null>(null);
  const dispatchedChats = useRef(0);
- useEffect(() => { if (!isConnected) task.current = null; }, [isConnected]);
- const ensureTask = useCallback(async (): Promise<string> => {
-  if (!client || !isConnected) throw new Error('RocketRide is disconnected.');
-  if (!task.current) {
-    let started: Awaited<ReturnType<typeof client.use>>;
-    try { started = await client.use({ pipeline, ttl: 900, useExisting: true, pipelineTraceLevel: 'metadata' }); }
-    catch (error) { throw new Error(safeFailure(error, 'RocketRide task creation')); }
-    if (started.reused === true) {
-     const current = await client.getTaskPipeline(started.token);
-     const components = Array.isArray(current?.components) ? current.components : [];
-     const auth = components.find((item: { id?: string }) => item.id === 'tool_auth0_1');
-     const agent = components.find((item: { id?: string }) => item.id === 'agent_rocketride_1');
-      const llm = components.find((item: { id?: string }) => item.id === 'llm_gemini_1');
-      if (!auth || auth.provider !== 'tool_auth0' || auth.config?.allowWrite !== false || !agent || agent.provider !== 'agent_rocketride' || agent.config?.require_tool_call !== true || !llm || llm.provider !== 'llm_gemini') throw new Error('The running task does not match the required read-only safeguards and Gemini model configuration. Stop it before starting this investigation.');
-    }
-    task.current = started.token;
-    setReusedTask(started.reused === true);
-   }
-  return task.current!;
- }, [client, isConnected]);
  const ensureTelemetryTask = useCallback(async (): Promise<string> => {
   if (!client || !isConnected) throw new Error('RocketRide is disconnected.');
   try { return await startTelemetryTask(client, telemetryPipeline); }
@@ -114,13 +92,8 @@ function AppContents() {
    return JSON.stringify(analysis);
  }, [askModel]);
 
- const sidebar = <nav className="nav" aria-label="LoginLens navigation">
-  <div className="nav-group">{sections.map(item => <button key={item} className="nav-item" aria-current={section === item ? 'page' : undefined} onClick={() => setSection(item)}>{item}</button>)}</div>
-  <div className="nav-note">Read-only workspace</div>
- </nav>;
- return <AppLayout sidebar={sidebar} showStatus><main className="app">
-  {reusedTask && <div className="banner">Reconnected to an existing pipeline task. It may use an earlier configuration; restart that task to apply pipeline changes.</div>}
-  <LoginLens page={section} navigate={setSection} model={askModel} client={client} connected={isConnected} startData={ensureTelemetryTask} renderAccountInvestigation={active => <InvestigationWorkspace active={active} client={client} connected={isConnected} start={ensureTask} analyze={analyzeInvestigation} busy={busy} setBusy={setBusy} />}/>
+ return <AppLayout sidebar={<LensSidebar page={section} navigate={setSection} alertCount={alertCount} />} showStatus><main className="app">
+  <LoginLens page={section} navigate={setSection} onAlertCount={setAlertCount} model={askModel} client={client} connected={isConnected} startData={ensureTelemetryTask} renderAccountInvestigation={active => <AccountInvestigation active={active} client={client} connected={isConnected} start={ensureTelemetryTask} analyze={analyzeInvestigation} busy={busy} setBusy={setBusy} />}/>
  </main></AppLayout>;
 }
 

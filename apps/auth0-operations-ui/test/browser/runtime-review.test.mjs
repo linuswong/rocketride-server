@@ -38,7 +38,7 @@ test('engine response reaches graph review', {timeout: 45000}, async () => {
   await send('Runtime.enable');
 
   await send('Emulation.setDeviceMetricsOverride',{width:1200,height:1000,deviceScaleFactor:1,mobile:false});
-  await waitFor(()=>evaluate("document.querySelectorAll('nav button').length===5"));
+  await waitFor(()=>evaluate("document.querySelectorAll('nav button').length===6"));
   await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Load tenant events').click()");
   await waitFor(()=>evaluate("document.body.innerText.includes('Tenant snapshot')"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");

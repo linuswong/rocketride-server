@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { detect } from '../src/lensRules.ts';
 import { exampleEvents } from '../src/lensExample.ts';
 import { normalize, summarize } from '../src/loginLensAnalytics.ts';
-import { propose, validatePlan, execute, fixtureTools, findings, registry, registryInputs, assessPlan } from '../src/lensPlan.ts';
+import { propose, fullInvestigationPlan, recommendedAction, validatePlan, execute, fixtureTools, findings, registry, registryInputs, assessPlan } from '../src/lensPlan.ts';
 import { invokeRead } from '../src/operations.ts';
 import { classifyAnomaly, classifications } from '../src/anomalyClassification.ts';
 const now = Date.UTC(2026, 10, 18, 12),
@@ -44,7 +44,7 @@ test('classifies explicit protection and configuration evidence without assertin
  assert.equal(result.primary,'authentication_failure_spike');
 });
 test('planner advertises exactly the tools covered by the node compatibility adapter', () => {
- assert.deepEqual(Object.keys(registry).filter(name => name !== 'analyze_source_groups').sort(), Object.keys(registryInputs).sort());
+ assert.deepEqual(Object.keys(registry).filter(name => !['analyze_source_groups','investigate_source_accounts','investigate_source_group','investigate_account_history'].includes(name)).sort(), Object.keys(registryInputs).sort());
 });
 test('sign-ups are counted separately, missing geography stays unknown and inherited type names are excluded', () => {
 	const rows = ['s', 'fp', 'ss', 'constructor'].map((type, i) => ({
@@ -131,7 +131,32 @@ test('equal historical windows use the same duration and never equate partial co
  assert.equal(Date.parse(windows[0].end),Date.parse(windows[1].start));
  assert.equal(Date.parse(windows[0].end)-Date.parse(windows[0].start),Date.parse(windows[1].end)-Date.parse(windows[1].start));
  assert.equal(result.previous.facts.coverage,'partial');
+ assert.equal(result.previous.state,'partial');
  assert.ok(assessPlan(plan,anomaly).gaps.some(g=>g.includes('independently verified coverage')));
+});
+test('partial history preserves returned evidence and exposes an Auth0 stop to later checks', async () => {
+ const graph=fullInvestigationPlan(anomaly), fixture=fixtureTools(anomaly);
+ for (const code of ['RATE_LIMITED','MISSING_SCOPE']) {
+  let accountReads=0;
+  const client={async tool(options) {
+   if (['get_user','get_user_logs','get_user_blocks'].includes(options.tool)) accountReads++;
+   const result=await fixture.tool(options);
+   if (options.tool==='search_authentication_history' && options.input.end===new Date(anomaly.end).toISOString()) return {...result,coverage:'partial',reason:code,retry_after_seconds:code==='RATE_LIMITED' ? 45 : null};
+   return result;
+  }};
+  const results=await execute(graph,anomaly,client,'fixture',()=>{});
+  assert.equal(results.current.state,'partial');
+  assert.equal(results.current.facts.historyError,code);
+  assert.ok(results.current.facts.returned>0);
+  if (code==='RATE_LIMITED') {
+   assert.equal(results.current.facts.historyRetryAfterSeconds,45);
+   assert.equal(results['source-accounts'].state,'skipped');
+   assert.equal(accountReads,0);
+   assert.match(recommendedAction(graph,results).action,/at least 45 seconds/);
+  } else {
+   assert.match(recommendedAction(graph,results).action,/read:logs/);
+  }
+ }
 });
 test('protection and signup events do not establish a comparable sign-in baseline', () => {
  const prior={...fixture[0],id:'prior-protection',kind:'protection',category:'IP protection',time:now-1800000};
@@ -154,7 +179,7 @@ test('three anomaly types can receive different validated model-generated graphs
 		]}));
 		assert.equal(proposed.length,3);
 		assert.equal(proposed.at(-1).tool,'analyze_source_groups');
-		assert.ok(Object.values(await execute(proposed,current,fixtureTools(current),'fixture',()=>{})).every(r=>r.state==='success'));
+		assert.ok(Object.values(await execute(proposed,current,fixtureTools(current),'fixture',()=>{})).every(r=>['success','partial'].includes(r.state)));
 		const review=assessPlan(proposed,current);
 		assert.ok(review.capabilities.some(capability=>capability.includes('selected event')));
 		if(rule==='Geographic concentration') assert.ok(review.gaps.some(gap=>gap.includes('geographic baseline')));
@@ -261,11 +286,11 @@ test('deny unknown operations, arbitrary parameters, invalid references, cycles 
 });
 test('timeout, API failure and mismatched event preserve independent snapshot analysis', async () => {
 	const graph = await propose(anomaly);
-	for (const response of [
+	for (const [index,response] of [
 		() => new Promise(() => {}),
 		async () => ({ success: false, error_code: 'DENIED' }),
 		async () => ({ success: true, log_id: 'other' }),
-	]) {
+	].entries()) {
 		let calls = 0;
 		const results = await execute(
 			graph,
@@ -281,10 +306,11 @@ test('timeout, API failure and mismatched event preserve independent snapshot an
 			() => true,
 			5
 		);
-		assert.equal(calls, 1);
+		assert.equal(calls, index===0 ? 2 : 3);
 		assert.equal(results.event.state, 'failed');
 		assert.equal(results.account.state, 'skipped');
-		assert.deepEqual((await findings(graph, results)).map(item => item.id), ['source-analysis']);
+		assert.equal(results['source-analysis'].state, index===0 ? 'partial' : 'failed');
+		assert.ok(results['source-analysis'].facts.largestGroup > 0);
 	}
 });
 test('history and recent-event steps use bounded bindings and expose only aggregate evidence', async () => {
@@ -296,7 +322,8 @@ test('history and recent-event steps use bounded bindings and expose only aggreg
  const inputs=[];
  const responses=fixtureTools(anomaly);
  const results=await execute(steps,anomaly,{async tool(o){inputs.push(o); return responses.tool(o);}},'fixture',()=>{});
- assert.ok(Object.values(results).every(r=>r.state==='success'));
+ assert.equal(results.history.state,'partial');
+ assert.equal(results.event.state,'success'); assert.equal(results.recent.state,'success');
  const history=inputs.find(x=>x.tool==='search_authentication_history').input;
  assert.equal(Date.parse(history.end),anomaly.start);
  assert.equal(Date.parse(history.end)-Date.parse(history.start),86400000);
@@ -304,8 +331,7 @@ test('history and recent-event steps use bounded bindings and expose only aggreg
  assert.equal(results.history.facts.scope,'Tenant-wide');
  assert.ok(!JSON.stringify(results).includes(anomaly.events[0].id));
  const interpretation = await findings(steps,results);
- assert.match(interpretation.find(f=>f.id==='history').uncertainty,/tenant-wide/);
- assert.doesNotMatch(interpretation.find(f=>f.id==='history').possibleCause,/protection settings/i);
+ assert.equal(interpretation.find(f=>f.id==='history'),undefined);
  for (const update of [{period:'arbitrary'}, {period:'anomaly',ref:'E1'}, {period:'previous_24h',input:{start:'x'}}]) {
   assert.throws(()=>validatePlan({steps:[steps[0],{...steps[1],...update}]},anomaly));
  }
@@ -327,7 +353,7 @@ test('independent steps run concurrently and failures skip only their dependents
 });
 
 
-test('source analysis counts selected failures and missing groups without requesting IP addresses', async () => {
+test('source analysis checks largest group and excludes its IP from model evidence', async () => {
  const events = anomaly.events.slice(0, 4).map((event, i) => ({...event, id:'source-test-'+i, source:i===3 ? undefined : i===2 ? 42 : 41}));
  const context = {...anomaly, events};
  const graph = await propose(context);
@@ -335,14 +361,156 @@ test('source analysis counts selected failures and missing groups without reques
  const results = await execute(graph, context, {tool:async options => { calls++; return fixtureTools(context).tool(options); }}, 'fixture', () => {});
  const result = results['source-analysis'];
  assert.deepEqual([result.facts.selectedFailures,result.facts.withSource,result.facts.missingSource,result.facts.sourceGroups,result.facts.largestGroup], [4,3,1,2,2]);
- assert.equal(calls, graph.length - 1);
+ assert.equal(calls, graph.length+1);
+ assert.equal(result.facts.aclRangeMatches,1);
+ assert.equal(result.facts.aclCoverage,'retrieved');
+ assert.equal(result.facts.sourceIp, '192.0.2.10');
+ assert.equal(result.facts.bruteForceAllowlisted, true);
  assert.ok(!JSON.stringify(result).includes('41'));
  let sent;
  await findings(graph, results, async (_, payload) => { sent = payload; return JSON.stringify({findings:[{reference:'source-analysis',possibleCause:'A shared source may be shared egress.',uncertainty:'One source is missing.',nextStep:'Review the common source because it groups two failures.',possibleRemediation:'Review before taking action.'}]}); }, context);
  assert.equal(sent.observations.find(item => item.id === 'source-analysis').evidence.largestGroup, 2);
+ assert.ok(!JSON.stringify(sent).includes('192.0.2.10'));
  const missingContext = {...context, events: events.map(event => ({...event, source:undefined}))};
  const missingGraph = await propose(missingContext);
  const missingResults = await execute(missingGraph, missingContext, fixtureTools(missingContext), 'fixture', () => {});
  assert.equal(missingResults['source-analysis'].facts.missingSource, 4);
  assert.match(missingResults['source-analysis'].detail, /unavailable/);
+});
+test('full investigation runs each applicable check and gives one grounded action', async () => {
+ const graph=fullInvestigationPlan(anomaly);
+ assert.deepEqual(graph.map(step=>step.id), ['event','account','network','current','previous','recent','source-analysis','source-accounts']);
+ const results=await execute(graph,anomaly,fixtureTools(anomaly),'fixture',()=>{});
+ assert.ok(Object.values(results).every(item=>['success','partial'].includes(item.state)));
+ assert.match(recommendedAction(graph,results).action,/credential/i);
+ const failed={...results,event:{state:'failed',detail:'denied'}};
+ assert.match(recommendedAction(graph,failed).reason,/incomplete/i);
+ const accountEvidence=results['source-accounts'].accountEvidence;
+ const withBlock={...failed,'source-accounts':{...results['source-accounts'],state:'partial',accountEvidence:{...accountEvidence,accounts:accountEvidence.accounts.map((account,index)=>index===0?{...account,blocked:true}:account)}}};
+ assert.match(recommendedAction(graph,withBlock).action,/block/i);
+ assert.equal(recommendedAction(graph,withBlock).kind,'verified-block');
+ assert.match(recommendedAction(graph,withBlock).action,/clear/i);
+ assert.match(recommendedAction(graph,withBlock).reason,/may not explain every failure/i);
+ assert.match(recommendedAction(graph,withBlock).reason,/incomplete/i);
+});
+test('the fallback identifies the exact missing permissions for failed account evidence', async () => {
+ const graph=fullInvestigationPlan(anomaly);
+ const results=await execute(graph,anomaly,fixtureTools(anomaly),'fixture',()=>{});
+ const evidence=results['source-accounts'].accountEvidence;
+ const accounts=evidence.accounts.map(account=>({...account,selectedFailures:1,sameSourceRecentFailures:1,blocked:false,bruteForceBlocked:false}));
+ accounts[0].logsError='MISSING_SCOPE';
+ accounts[0].logs='failed';
+ const missing={...results,'source-accounts':{...results['source-accounts'],state:'partial',accountEvidence:{...evidence,eventErrors:{MISSING_SCOPE:1},accounts}}};
+ const recommendation=recommendedAction(graph,missing);
+ assert.match(recommendation.action,/read:logs\b/);
+ assert.match(recommendation.action,/read:logs_users\b/);
+ assert.match(recommendation.action,/wait 30 seconds/);
+ assert.doesNotMatch(recommendation.action,/read:users\b/);
+ assert.equal(recommendation.reference,'source-accounts');
+ assert.match(recommendation.reason,/does not establish/);
+ const repeated={...missing,'source-accounts':{...missing['source-accounts'],accountEvidence:{...missing['source-accounts'].accountEvidence,accounts:accounts.map((account,index)=>index===0?{...account,selectedFailures:2}:account)}}};
+ assert.match(recommendedAction(graph,repeated).action,/read:logs_users/);
+});
+test('the fallback does not describe repeated email candidates as verified account activity', async () => {
+ const graph=fullInvestigationPlan(anomaly);
+ const results=await execute(graph,anomaly,fixtureTools(anomaly),'fixture',()=>{});
+ const evidence=results['source-accounts'].accountEvidence;
+ const accounts=evidence.accounts.map((account,index)=>({...account,selectedFailures:index===0?2:1,directFailures:index===0?0:1,emailHintFailures:index===0?2:0,sameSourceRecentFailures:1,blocked:false,bruteForceBlocked:false,profile:'verified'}));
+ const candidate={...results,'source-accounts':{...results['source-accounts'],accountEvidence:{...evidence,accounts}}};
+ const recommendation=recommendedAction(graph,candidate);
+ assert.match(recommendation.action,/email-derived candidate/);
+ assert.match(recommendation.reason,/do not verify/);
+ assert.doesNotMatch(recommendation.reason,/verified account/);
+});
+test('a shared rate limit takes priority over a speculative remediation',async()=>{
+ const graph=fullInvestigationPlan(anomaly),results=await execute(graph,anomaly,fixtureTools(anomaly),'fixture',()=>{});
+ const source=results['source-accounts'].accountEvidence;
+ const stopped={...results,'source-accounts':{...results['source-accounts'],state:'partial',accountEvidence:{...source,eventStopReason:'RATE_LIMITED'}}};
+ const recommendation=recommendedAction(graph,stopped);
+ assert.equal(recommendation.kind,'prerequisite');
+ assert.match(recommendation.action,/rate limit/);
+ assert.match(recommendation.reason,/cannot establish/);
+ const timed={...stopped,'source-accounts':{...stopped['source-accounts'],accountEvidence:{...stopped['source-accounts'].accountEvidence,eventRetryAfterSeconds:73}}};
+ assert.match(recommendedAction(graph,timed).action,/at least 73 seconds/);
+ const missing={...timed,'source-analysis':{...timed['source-analysis'],facts:{...timed['source-analysis'].facts,aclError:'MISSING_SCOPE'}}};
+ assert.match(recommendedAction(graph,missing).action,/read:network_acls/);
+ assert.match(recommendedAction(graph,missing).action,/wait 73 seconds/);
+ const unknown={...timed,event:{state:'failed',detail:'RATE_LIMITED'}};
+ assert.match(recommendedAction(graph,unknown).action,/rate limit to clear/);
+ assert.doesNotMatch(recommendedAction(graph,unknown).action,/73 seconds/);
+});
+test('incomplete checks do not produce a generic instruction to repeat the investigation',async()=>{
+ const graph=fullInvestigationPlan(anomaly),results=await execute(graph,anomaly,fixtureTools(anomaly),'fixture',()=>{});
+ const recommendation=recommendedAction(graph,{...results,event:{state:'failed',detail:'Unavailable'},'source-accounts':{state:'skipped',detail:'Unavailable'}});
+ assert.match(recommendation.action,/cannot determine a fix/);
+ assert.doesNotMatch(recommendation.action,/rerun|resolve the incomplete/i);
+});
+test('an unavailable allowlist comparison identifies its missing attack-protection scope', async () => {
+ const graph=fullInvestigationPlan(anomaly), fixture=fixtureTools(anomaly);
+ const client={tool:async options=>options.tool==='get_log_event' && options.input.compare_source ? {success:false,error_code:'MISSING_SCOPE'} : fixture.tool(options)};
+ const results=await execute(graph,anomaly,client,'fixture',()=>{});
+ assert.equal(results['source-analysis'].facts.allowlistError,'MISSING_SCOPE');
+ assert.equal(results['source-accounts'].state,'success');
+ assert.match(recommendedAction(graph,results).action,/read:attack_protection/);
+});
+test('ACL range evidence is bound to the same event and reports missing permission or partial coverage', async () => {
+ const graph=fullInvestigationPlan(anomaly), fixture=fixtureTools(anomaly);
+ const run=async override=>execute(graph,anomaly,{tool:async options=>options.tool==='compare_network_acl_ranges' ? override(await fixture.tool(options)) : fixture.tool(options)},'fixture',()=>{});
+ const partial=await run(result=>({...result,coverage:'partial'}));
+ assert.equal(partial['source-analysis'].state,'partial');
+ assert.equal(partial['source-accounts'].state,'success');
+ assert.equal(partial['source-analysis'].facts.aclCoverage,'partial');
+ assert.equal(partial['source-analysis'].facts.aclRangeMatches,1);
+ const mismatch=await run(result=>({...result,source_ip:'192.0.2.200'}));
+ assert.equal(mismatch['source-analysis'].facts.aclCoverage,'unavailable');
+ assert.equal(mismatch['source-analysis'].facts.aclRangeMatches,undefined);
+ const denied=await run(()=>({success:false,error_code:'MISSING_SCOPE'}));
+ assert.equal(denied['source-analysis'].facts.aclError,'MISSING_SCOPE');
+ assert.match(recommendedAction(graph,denied).action,/read:network_acls/);
+ const unavailable=await run(()=>({success:false,error_code:'FEATURE_UNAVAILABLE'}));
+ assert.equal(unavailable['source-analysis'].facts.aclError,'FEATURE_UNAVAILABLE');
+ assert.doesNotMatch(recommendedAction(graph,unavailable).action,/read:network_acls/);
+});
+test('older Auth0 nodes leave fingerprint coverage partial without losing account correlation', async () => {
+ const graph=fullInvestigationPlan(anomaly),fixture=fixtureTools(anomaly);
+ const client={tool:async options=>options.tool==='get_log_event' && options.input.include_fingerprint ? {success:false,error_code:'INVALID_INPUT'} : fixture.tool(options)};
+ const results=await execute(graph,anomaly,client,'fixture',()=>{});
+ assert.equal(results['source-accounts'].state,'partial');
+ assert.ok(results['source-accounts'].accountEvidence.matched>0);
+ assert.ok(results['source-accounts'].accountEvidence.fingerprintFallbacks>0);
+});
+test('source comparisons retry a short rate limit once and stop dependent reads on a persistent limit', async () => {
+ const graph=fullInvestigationPlan(anomaly), fixture=fixtureTools(anomaly);
+ for (const target of ['allowlist','acl']) {
+  for (const persistent of [false,true]) {
+   let attempts=0, fallbackReads=0;
+   const client={tool:async options=>{
+    if (options.tool==='get_log_event' && options.input.include_source && options.input.analytics) fallbackReads++;
+    const matches=target==='acl' ? options.tool==='compare_network_acl_ranges' : options.tool==='get_log_event' && options.input.compare_source;
+    if (matches && (++attempts===1 || persistent)) return {success:false,error_code:'RATE_LIMITED',retryable:true,retry_after_seconds:0.001};
+    return fixture.tool(options);
+   }};
+   const results=await execute(graph,anomaly,client,'fixture',()=>{});
+   assert.equal(attempts,2);
+   assert.equal(results['source-analysis'].facts[target==='acl' ? 'aclRateRetries' : 'allowlistRateRetries'],1);
+   if (persistent) {
+    assert.equal(results['source-analysis'].facts[target==='acl' ? 'aclError' : 'allowlistError'],'RATE_LIMITED');
+    assert.equal(results['source-accounts'].state,'skipped');
+    assert.equal(fallbackReads,0);
+   } else {
+    assert.equal(results['source-analysis'].facts.aclCoverage,'retrieved');
+    assert.equal(results['source-accounts'].state,'success');
+   }
+  }
+ }
+});
+test('source traffic compares sign-ins from the same group and window only', async () => {
+ const selected=anomaly.events.slice(0,2).map((event,i)=>({...event,id:`traffic-${i}`,source:41}));
+ const context={...anomaly,events:selected};
+ const snapshot=[...selected,{...selected[0],id:'success',kind:'success',category:'Successful login'},
+  {...selected[0],id:'other-source',source:42}, {...selected[0],id:'outside',time:context.start-1}];
+ const graph=fullInvestigationPlan(context);
+ const result=await execute(graph,context,fixtureTools(context),'fixture',()=>{},()=>true,30000,snapshot);
+ const facts=result['source-analysis'].facts;
+ assert.equal(facts.windowFailures,2); assert.equal(facts.windowSuccesses,1); assert.equal(facts.windowFailureRate,66.7);
 });

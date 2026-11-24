@@ -14,6 +14,23 @@ const protections: Record<string, string> = {
 	limit_sul: 'Account rate limited',
 	limit_mu: 'IP protection',
 };
+export type OtherEvent = { id: string; time: number; type: string; app: string };
+export function otherEvents(rows: unknown[]): OtherEvent[] {
+	const seen = new Set<string>();
+	const result: OtherEvent[] = [];
+	for (const row of rows) {
+		if (!row || typeof row !== 'object') continue;
+		const e = row as Record<string, unknown>;
+		const id = typeof e.log_id === 'string' ? e.log_id : '';
+		const type = typeof e.type === 'string' ? e.type : '';
+		const time = typeof e.date === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/i.test(e.date) ? Date.parse(e.date) : NaN;
+		if (!id || !type || !Number.isFinite(time) || seen.has(id)) continue;
+		seen.add(id);
+		if (type === 's' || type === 'ss' || Object.hasOwn(failures, type) || Object.hasOwn(protections, type)) continue;
+		result.push({ id, time, type, app: typeof e.client_name === 'string' && e.client_name ? e.client_name : 'Unknown application' });
+	}
+	return result.sort((a, b) => b.time - a.time);
+}
 export function normalize(rows: unknown[]): { events: Event[]; skipped: number } {
 	const seen = new Set<string>();
 	const events: Event[] = [];

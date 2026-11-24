@@ -38,6 +38,15 @@ test('missing, malformed, denied and rate-limited results are errors', async () 
   const e = await invokeRead(clientWith({search_logs:response}),'token','search_logs',{}); assert.equal(e.status,'error'); assert.equal(e.data,undefined);
  }
 });
+test('application settings accept only the nonsecret response contract',async()=>{
+ const config={client_id:'client-1',app_type:'spa',token_endpoint_auth_method:'none',authorization_code_enabled:true,password_enabled:false,refresh_token_enabled:null,client_credentials_enabled:false};
+ const good=await invokeRead(clientWith({get_application_config:ok(config)}),'token','get_application_config',{client_id:'client-1'});
+ assert.equal(good.status,'success');
+ for(const bad of [{...config,client_secret:'private-secret'},{...config,password_enabled:'false'},{...config,app_type:'untrusted'}]) {
+  const result=await invokeRead(clientWith({get_application_config:ok(bad)}),'token','get_application_config',{client_id:'client-1'});
+  assert.equal(result.status,'error');assert.equal(result.data,undefined);assert.doesNotMatch(JSON.stringify(result),/private-secret/);
+ }
+});
 test('unsupported and write tools are not invoked', async () => {
  const client = clientWith();
  assert.match(planLookup('delete_user user_id: auth0|123').error,/unavailable/);
@@ -55,4 +64,15 @@ test('bundled pipeline remains read-only and requires a real agent tool call', (
  const auth=p.components.find(c=>c.provider==='tool_auth0'); const agent=p.components.find(c=>c.provider==='agent_rocketride');
  assert.equal(auth.config.allowWrite,false); assert.equal(auth.config.writeClientId,''); assert.equal(auth.config.writeClientSecret,''); assert.equal(agent.config.require_tool_call,true);
  assert.match(auth.config.clientSecret,/^\$\{ROCKETRIDE_[A-Z0-9_]+\}$/);
+});
+test('bundled AI pipelines use the Gemini key for their selected model', () => {
+ for (const file of ['investigation.pipe', 'planner.pipe', 'synthetic_investigation.pipe']) {
+  const pipeline = JSON.parse(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'));
+  const models = pipeline.components.filter(c => c.provider.startsWith('llm_'));
+  assert.equal(models.length, 1, file);
+  const model = models[0];
+  assert.equal(model.provider, 'llm_gemini', file);
+  assert.equal(model.config.profile, 'models-gemini-3-1-flash-lite', file);
+  assert.equal(model.config[model.config.profile].apikey, '${ROCKETRIDE_GEMINI_KEY}', file);
+ }
 });

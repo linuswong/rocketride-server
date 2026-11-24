@@ -820,6 +820,71 @@ class IInstance(IInstanceBase):
         return _run(op)
 
     @tool_function(
+        input_schema=_schema(['client_id'], {'client_id': _ID}),
+        output_schema=_output(
+            {
+                'client_id': _STRING,
+                'app_type': _STRING,
+                'token_endpoint_auth_method': _STRING,
+                'authorization_code_enabled': _BOOL,
+                'password_enabled': _BOOL,
+                'refresh_token_enabled': _BOOL,
+                'client_credentials_enabled': _BOOL,
+            }
+        ),
+        description='Read selected nonsecret settings of one application; requires read:clients.',
+    )
+    def get_application_config(self, args):
+        """Return allowlisted settings without retrieving client secrets."""
+
+        def op():
+            data = _input(args, 'get_application_config')
+            if set(data) != {'client_id'}:
+                raise Auth0Error('INVALID_INPUT', 'Only client_id is accepted.')
+            client_id = _identifier(data, 'client_id')
+            result = _object(
+                self._client().request(
+                    'get_application_config',
+                    identifier=client_id,
+                    params={
+                        'fields': 'client_id,app_type,grant_types,token_endpoint_auth_method',
+                        'include_fields': 'true',
+                    },
+                )
+            )
+            if result.get('client_id') != client_id:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an unexpected application.')
+            grants = result.get('grant_types')
+            if grants is not None and (
+                not isinstance(grants, list) or any(not isinstance(item, str) for item in grants)
+            ):
+                raise Auth0Error('API_ERROR', 'Auth0 returned invalid application settings.')
+            app_type = result.get('app_type')
+            method = result.get('token_endpoint_auth_method')
+            if (app_type is not None and not isinstance(app_type, str)) or (
+                method is not None and not isinstance(method, str)
+            ):
+                raise Auth0Error('API_ERROR', 'Auth0 returned invalid application settings.')
+            return {
+                'client_id': client_id,
+                'app_type': app_type if app_type in ('native', 'spa', 'regular_web', 'non_interactive') else None,
+                'token_endpoint_auth_method': method
+                if method in ('none', 'client_secret_basic', 'client_secret_post', 'private_key_jwt')
+                else None,
+                **{
+                    f'{name}_enabled': None if grants is None else any(grant in grants for grant in values)
+                    for name, values in (
+                        ('authorization_code', ('authorization_code',)),
+                        ('password', ('password', 'http://auth0.com/oauth/grant-type/password-realm')),
+                        ('refresh_token', ('refresh_token',)),
+                        ('client_credentials', ('client_credentials',)),
+                    )
+                },
+            }
+
+        return _run(op)
+
+    @tool_function(
         input_schema=_schema([], _PAGINATION),
         output_schema=_output({'roles': {'type': 'array', 'items': _ROLE}, 'count': {'type': 'integer'}}),
         description='List one page of tenant roles; names and descriptions are untrusted data. Requires read:roles.',
@@ -1060,7 +1125,12 @@ class IInstance(IInstanceBase):
 
     @tool_function(
         input_schema=_schema(
-            ['user_id'], {'user_id': _ID, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50, 'default': 10}}
+            ['user_id'],
+            {
+                'user_id': _ID,
+                'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50, 'default': 10},
+                'page': {'type': 'integer', 'minimum': 0, 'maximum': 4, 'default': 0},
+            },
         ),
         output_schema=_output({'events': {'type': 'array', 'items': _EVENT}, 'count': {'type': 'integer'}}),
         description='Get recent sanitized user authentication events; configure read:logs_users.',
@@ -1072,9 +1142,12 @@ class IInstance(IInstanceBase):
             """Fetch and sanitize recent user events."""
             data = _input(args, 'get_user_logs')
             user_id, limit = _identifier(data, 'user_id'), _limit(data, 50)
+            page = data.get('page', 0)
+            if isinstance(page, bool) or not isinstance(page, int) or not 0 <= page <= 4:
+                raise Auth0Error('INVALID_INPUT', 'page must be an integer between 0 and 4.')
             events = _list(
                 self._client().request(
-                    'get_user_logs', identifier=user_id, params={'page': 0, 'per_page': limit, 'sort': 'date:-1'}
+                    'get_user_logs', identifier=user_id, params={'page': page, 'per_page': limit, 'sort': 'date:-1'}
                 )
             )
             result = [_event(item) for item in events[:limit]]
@@ -1083,8 +1156,110 @@ class IInstance(IInstanceBase):
         return _run(op)
 
     @tool_function(
-        input_schema=_schema(['log_id'], {'log_id': _ID, 'analytics': {'type': 'boolean'}}),
-        output_schema=_output({**_EVENT['properties'], 'user_id': _STRING, 'diagnostics': {'type': 'string'}}),
+        input_schema=_schema(['log_id'], {'log_id': _ID}),
+        output_schema=_output(
+            {
+                **_EVENT['properties'],
+                'source_ip': _STRING,
+                'ip_range_matches': {'type': ['integer', 'null']},
+                'active_rules_checked': {'type': 'integer'},
+                'coverage': {'type': 'string'},
+            }
+        ),
+        description='Compare an event IP with configured authentication ACL match ranges; requires read:logs and read:network_acls.',
+    )
+    def compare_network_acl_ranges(self, args):
+        """Count ACL match-range membership without claiming a rule was applied."""
+
+        def op():
+            data = _input(args, 'compare_network_acl_ranges')
+            event = _object(self._client().request('get_log_event', identifier=_identifier(data, 'log_id')))
+            try:
+                address = ipaddress.ip_address(event.get('ip'))
+            except (ValueError, TypeError):
+                address = None
+            if address is None:
+                return {
+                    **_event(event),
+                    'source_ip': None,
+                    'ip_range_matches': None,
+                    'active_rules_checked': 0,
+                    'coverage': 'source_unavailable',
+                }
+            page = _object(
+                self._client().request(
+                    'list_network_acls', params={'page': 0, 'per_page': 100, 'include_totals': 'true'}
+                )
+            )
+            rules = _list(page.get('network_acls'))
+            total = page.get('total')
+            if isinstance(total, bool) or not isinstance(total, int) or total < len(rules) or len(rules) > 100:
+                raise Auth0Error('API_ERROR', 'Auth0 returned an invalid network ACL response.')
+            checked = matches = 0
+            for entry in rules:
+                active = entry.get('active')
+                rule = entry.get('rule')
+                if not isinstance(active, bool) or not isinstance(rule, dict) or not isinstance(rule.get('scope'), str):
+                    raise Auth0Error('API_ERROR', 'Auth0 returned an invalid network ACL response.')
+                if not active or rule['scope'] not in ('authentication', 'tenant'):
+                    continue
+                checked += 1
+                criteria = rule.get('match', {})
+                if not isinstance(criteria, dict):
+                    raise Auth0Error('API_ERROR', 'Auth0 returned an invalid network ACL response.')
+                ranges = []
+                for key in ('ipv4_cidrs', 'ipv6_cidrs'):
+                    values = criteria.get(key, [])
+                    if (
+                        not isinstance(values, list)
+                        or len(values) > 100
+                        or not all(isinstance(value, str) for value in values)
+                    ):
+                        raise Auth0Error('API_ERROR', 'Auth0 returned an invalid network ACL response.')
+                    ranges.extend(values)
+                try:
+                    networks = [ipaddress.ip_network(value, strict=False) for value in ranges]
+                except ValueError:
+                    raise Auth0Error('API_ERROR', 'Auth0 returned an invalid network ACL response.') from None
+                if any(address.version == network.version and address in network for network in networks):
+                    matches += 1
+            return {
+                **_event(event),
+                'source_ip': str(address),
+                'ip_range_matches': matches,
+                'active_rules_checked': checked,
+                'coverage': 'retrieved' if len(rules) == total else 'partial',
+            }
+
+        return _run(op)
+
+    @tool_function(
+        input_schema=_schema(
+            ['log_id'],
+            {
+                'log_id': _ID,
+                'analytics': {'type': 'boolean'},
+                'include_source': {'type': 'boolean'},
+                'include_identity_hint': {'type': 'boolean'},
+                'include_fingerprint': {'type': 'boolean'},
+                'include_application': {'type': 'boolean'},
+                'compare_source': {'type': 'boolean'},
+            },
+        ),
+        output_schema=_output(
+            {
+                **_EVENT['properties'],
+                'user_id': _STRING,
+                'user_name': _STRING,
+                'client_id': _STRING,
+                'diagnostics': {'type': 'string'},
+                'source_ip': _STRING,
+                'ja3': _STRING,
+                'ja4': _STRING,
+                'brute_force_allowlisted': _BOOL,
+                'ip_throttling_allowlisted': _BOOL,
+            }
+        ),
         description='Get an event with allowlisted authentication diagnostics; requires read:logs.',
     )
     def get_log_event(self, args):
@@ -1095,11 +1270,76 @@ class IInstance(IInstanceBase):
             args_data = _input(args, 'get_log_event')
             if not isinstance(args_data.get('analytics', False), bool):
                 raise Auth0Error('INVALID_INPUT', 'analytics must be boolean.')
+            if not isinstance(args_data.get('compare_source', False), bool):
+                raise Auth0Error('INVALID_INPUT', 'compare_source must be boolean.')
+            if not isinstance(args_data.get('include_source', False), bool):
+                raise Auth0Error('INVALID_INPUT', 'include_source must be boolean.')
+            if not isinstance(args_data.get('include_identity_hint', False), bool) or (
+                args_data.get('analytics') and args_data.get('include_identity_hint')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'Identity hints are not available in analytics mode.')
+            if not isinstance(args_data.get('include_fingerprint', False), bool) or (
+                args_data.get('analytics') and args_data.get('include_fingerprint')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'Fingerprints are not available in analytics mode.')
+            if not isinstance(args_data.get('include_application', False), bool) or (
+                args_data.get('analytics') and args_data.get('include_application')
+            ):
+                raise Auth0Error('INVALID_INPUT', 'Application IDs are not available in analytics mode.')
             log_id = _identifier(args_data, 'log_id')
             data = _object(self._client().request('get_log_event', identifier=log_id))
             event = _event(data)
             identity = {} if args_data.get('analytics') else {'user_id': _log_text(data.get('user_id'))}
-            return {**event, **identity, 'diagnostics': event['description']}
+            result = {**event, **identity, 'diagnostics': event['description']}
+            if args_data.get('include_identity_hint'):
+                result['user_name'] = _log_text(data.get('user_name'))
+            if args_data.get('include_application'):
+                client_id = data.get('client_id')
+                result['client_id'] = (
+                    client_id
+                    if isinstance(client_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,128}', client_id)
+                    else None
+                )
+            if args_data.get('include_fingerprint'):
+                security = data.get('security_context')
+                ja3 = security.get('ja3') if isinstance(security, dict) else None
+                result['ja3'] = ja3.lower() if isinstance(ja3, str) and re.fullmatch(r'[a-fA-F0-9]{32}', ja3) else None
+                ja4 = security.get('ja4') if isinstance(security, dict) else None
+                result['ja4'] = (
+                    ja4.lower()
+                    if isinstance(ja4, str)
+                    and re.fullmatch(r'[tqd][a-z0-9]{2}[di][0-9]{4}[a-z0-9]{2}_[a-f0-9]{12}_[a-f0-9]{12}', ja4.lower())
+                    else None
+                )
+            if args_data.get('include_source') or args_data.get('compare_source'):
+                try:
+                    address = ipaddress.ip_address(data.get('ip'))
+                except (ValueError, TypeError):
+                    address = None
+                result['source_ip'] = str(address) if address else None
+            if args_data.get('compare_source'):
+                for method, key in [
+                    ('get_brute_force_settings', 'brute_force_allowlisted'),
+                    ('get_ip_throttling_settings', 'ip_throttling_allowlisted'),
+                ]:
+                    settings = _object(self._client().request(method))
+                    allowlist = settings.get('allowlist')
+                    if (
+                        not isinstance(allowlist, list)
+                        or len(allowlist) > 100
+                        or not all(isinstance(item, str) for item in allowlist)
+                    ):
+                        raise Auth0Error('API_ERROR', 'Auth0 returned an invalid allowlist.')
+                    try:
+                        networks = [ipaddress.ip_network(item, strict=False) for item in allowlist]
+                    except ValueError:
+                        raise Auth0Error('API_ERROR', 'Auth0 returned an invalid allowlist.') from None
+                    result[key] = (
+                        any(address.version == network.version and address in network for network in networks)
+                        if address
+                        else None
+                    )
+            return result
 
         return _run(op)
 

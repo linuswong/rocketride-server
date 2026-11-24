@@ -38,7 +38,7 @@ test('manual investigation requires review and approval', {timeout: 45000}, asyn
   await send('Runtime.enable');
 
   await send('Emulation.setDeviceMetricsOverride',{width:1200,height:1000,deviceScaleFactor:1,mobile:false});
-  await waitFor(()=>evaluate("document.querySelectorAll('nav button').length===5"));
+  await waitFor(()=>evaluate("document.querySelectorAll('nav button').length===6"));
   await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Analytics').click()");
   await waitFor(()=>evaluate("[...document.querySelectorAll('section')].some(s=>s.offsetParent && s.innerText.includes('Investigate selected activity'))"));
   await evaluate("[...document.querySelectorAll('section')].find(s=>s.offsetParent && s.innerText.includes('Investigate selected activity')).querySelector('button').click()");
@@ -84,7 +84,7 @@ test('manual investigation requires review and approval', {timeout: 45000}, asyn
    assert.equal(await evaluate("document.documentElement.dataset.fixtureCalls"),beforeProposal,'proposal must not execute investigation tools');
    if (!suffix.includes('badplan')) {
     const modelsBeforeRun=await evaluate("document.documentElement.dataset.modelCalls");
-    await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Settings').click()");
+    await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Integrations').click()");
     await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Investigations').click()");
     assert.match(await evaluate("document.body.innerText"),/Approve and run/);
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.offsetParent && b.textContent.includes('Approve and run')).click()");
@@ -94,9 +94,9 @@ test('manual investigation requires review and approval', {timeout: 45000}, asyn
     assert.equal(await evaluate("[...document.querySelectorAll('.lens-graph .react-flow__node.success')].some(node=>node.offsetParent)"),true);
     assert.match(await evaluate("document.body.innerText"),/AI interpretation is unavailable until separately requested/);
     assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Generate AI analysis')).disabled"),true);
-    for (const page of ['Overview','Analytics','Anomaly Detection','Settings']) {
+    for (const page of ['Overview','Map','Analytics','Alerts','Integrations']) {
      await evaluate(`[...document.querySelectorAll('nav button')].find(b=>b.textContent===${JSON.stringify(page)}).click()`);
-     assert.match(await evaluate('document.body.innerText'),new RegExp(page === 'Overview' ? 'Global authentication activity' : page));
+     assert.match(await evaluate('document.body.innerText'),new RegExp(page === 'Overview' ? 'Authentication insights at a glance' : page === 'Map' ? 'Global activity map' : page));
     }
     await evaluate("[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Investigations').click()");
     assert.match(await evaluate("document.body.innerText"),/2 of 2 checks succeeded/);

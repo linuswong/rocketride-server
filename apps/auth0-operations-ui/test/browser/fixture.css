@@ -1,0 +1,13 @@
+/* Test-host layout standing in for the shell's sidebar column. */
+body { margin: 0; }
+.app.lens-fixture { display: grid; grid-template-columns: auto minmax(0, 1fr); height: 100vh; overflow: hidden; }
+.lens-fixture > .nav { height: 100vh; }
+.lens-fixture > .lens-root { height: 100vh; overflow: auto; }
+@media (max-width: 760px) {
+	.app.lens-fixture { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+	.lens-fixture > .nav.lens-nav { height: auto; min-width: 0; padding: 8px; border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+	.lens-fixture > .nav.lens-nav .nav-group { grid-auto-flow: column; overflow-x: auto; }
+	.lens-fixture > .nav.lens-nav .nav-group .nav-item { white-space: nowrap; }
+	.lens-fixture .nav-note { display: none; }
+	.lens-fixture > .lens-root { height: auto; min-height: 0; }
+}

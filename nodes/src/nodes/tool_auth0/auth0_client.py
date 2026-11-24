@@ -121,6 +121,7 @@ class Auth0Client:
         self._base = 'https://' + validate_domain(cfg['domain'])
         self._tokens = {'read': None, 'write': None}
         self._locks = {'read': threading.Lock(), 'write': threading.Lock()}
+        self._scope_refresh_after = 0.0
         self._closed = False
 
     def close(self) -> None:
@@ -194,6 +195,26 @@ class Auth0Client:
             if self._tokens[kind] and self._tokens[kind][0] == token:
                 self._tokens[kind] = None
 
+    def _refresh_missing_scope(self, token):
+        """Bound refreshes after changed grants, even when many reads fail together."""
+        with self._locks['read']:
+            now = time.monotonic()
+            if self._closed:
+                return False
+            cached = self._tokens['read']
+            # Another request has already replaced or invalidated this token.
+            # Retrying uses the same single-flight token cache rather than
+            # issuing another refresh for every concurrent failed request.
+            if cached and cached[0] != token:
+                return True
+            if not cached and now < self._scope_refresh_after:
+                return True
+            if not cached or now < self._scope_refresh_after:
+                return False
+            self._tokens['read'] = None
+            self._scope_refresh_after = now + 30
+            return True
+
     def request(self, operation, *, identifier=None, params=None):
         """Call an approved route. Writes are never automatically replayed."""
         import requests
@@ -202,9 +223,11 @@ class Auth0Client:
             'search_users': ('GET', '/users'),
             'list_users': ('GET', '/users'),
             'list_applications': ('GET', '/clients'),
+            'get_application_config': ('GET', '/clients/{id}'),
             'search_logs': ('GET', '/logs'),
             'get_brute_force_settings': ('GET', '/attack-protection/brute-force-protection'),
             'get_ip_throttling_settings': ('GET', '/attack-protection/suspicious-ip-throttling'),
+            'list_network_acls': ('GET', '/network-acls'),
             'get_user': ('GET', '/users/{id}'),
             'get_user_logs': ('GET', '/users/{id}/logs'),
             'get_log_event': ('GET', '/logs/{id}'),
@@ -232,6 +255,7 @@ class Auth0Client:
         if kind == 'write' and not self._config.get('allowWrite'):
             raise Auth0Error('WRITE_DISABLED', 'Auth0 writes are disabled.')
         auth_retry = False
+        scope_retry = False
         retries = 0
         waited = 0.0
         while True:
@@ -300,6 +324,9 @@ class Auth0Client:
                 except ValueError:
                     codes = set()
                 if 'insufficient_scope' in codes:
+                    if kind == 'read' and not scope_retry and self._refresh_missing_scope(token):
+                        scope_retry = True
+                        continue
                     raise Auth0Error('MISSING_SCOPE', 'The Auth0 application lacks a required permission.')
                 # Tenants without the plan entitlement (for example, Organizations) are rejected with 403.
                 if codes & {'operation_not_supported', 'feature_not_enabled'}:

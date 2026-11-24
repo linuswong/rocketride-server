@@ -35,7 +35,7 @@ function StepStatus({ step }: { step: Step }) {
 	return <span className={'step-status ' + state}><span aria-hidden="true">{icons[state]}</span>{labels[state]}</span>;
 }
 
-function Inspector({step, result}:{step:Step; result?:Investigation}) {
+export function Inspector({step, result}:{step:Step; result?:Investigation}) {
  const [tab,setTab] = useState<InspectorTab>('Findings');
  const view = stepView(step), evidence = step.evidence;
  const matching = result ? findings(result).filter(item=>item.source===step.id) : [];

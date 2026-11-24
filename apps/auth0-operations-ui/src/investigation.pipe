@@ -150,48 +150,13 @@
       ]
     },
     {
-      "id": "llm_openai_api_1",
-      "provider": "llm_openai_api",
-      "name": "OpenAI-Compatible API",
-      "config": {
-        "profile": "custom",
-        "custom": {
-          "apikey": "${ROCKETRIDE_OPENROUTER_API_KEY}",
-          "base_url": "https://openrouter.ai/api/v1",
-          "model": "openrouter/free",
-          "modelOutputTokens": 4096,
-          "modelTotalTokens": 32768
-        },
-        "name": "OpenAI-Compatible API"
-      },
-      "ui": {
-        "position": {
-          "x": -90,
-          "y": 460
-        },
-        "measured": {
-          "width": 150,
-          "height": 79
-        },
-        "nodeType": "default",
-        "formDataValid": true
-      }
-    },
-    {
       "id": "llm_gemini_1",
       "provider": "llm_gemini",
       "name": "Gemini",
       "config": {
-        "profile": "gemini-3_1-flash-lite-preview",
-        "1-pro-preview": {},
+        "profile": "models-gemini-3-1-flash-lite",
         "name": "Gemini",
-        "models-gemini-3-5-flash": {
-          "apikey": "${ROCKETRIDE_GEMINI_KEY}"
-        },
-        "models-gemini-2-5-flash-batch": {
-          "apikey": "${ROCKETRIDE_GEMINI_KEY}"
-        },
-        "1-flash-lite-preview": {
+        "models-gemini-3-1-flash-lite": {
           "apikey": "${ROCKETRIDE_GEMINI_KEY}"
         }
       },
